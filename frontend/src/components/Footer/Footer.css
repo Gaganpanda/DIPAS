@@ -1,0 +1,79 @@
+/* ================================
+   FOOTER BASE
+================================ */
+.drdo-footer {
+  background: #0a2342;
+  color: #e5e7eb;
+  margin-top: 80px;
+}
+
+/* ================================
+   FOOTER CONTENT
+================================ */
+.footer-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 48px 40px;
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr;
+  gap: 48px;
+}
+
+/* ================================
+   FOOTER SECTIONS
+================================ */
+.footer-section h4 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  color: #ffffff;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 6px;
+}
+
+.footer-section p {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: #d1d5db;
+}
+
+.footer-section ul {
+  list-style: none;
+  padding: 0;
+}
+
+.footer-section ul li {
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  color: #d1d5db;
+}
+
+/* ================================
+   FOOTER BOTTOM BAR
+================================ */
+.footer-bottom {
+  background: #081a32;
+  text-align: center;
+  padding: 14px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ================================
+   RESPONSIVE
+================================ */
+@media (max-width: 900px) {
+  .footer-container {
+    grid-template-columns: 1fr;
+    padding: 36px 24px;
+  }
+
+  .footer-section {
+    text-align: center;
+  }
+
+  .footer-section h4 {
+    text-align: center;
+  }
+}
