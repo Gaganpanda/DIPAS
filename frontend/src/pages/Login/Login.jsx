@@ -1,188 +1,309 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "../App";
+import { login, register } from "../../api/authApi";
+import { useAuth } from "../../context/AuthContext";
+import dipasLogo from "../../assets/dipas-logo.png";
 import "./Login.css";
 
 const Login = () => {
-  const [selectedRole, setSelectedRole] = useState("admin");
-  const [credentials, setCredentials] = useState({
-    username: "",
-    password: "",
-  });
-  const [error, setError] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { setUser } = useAuth();
 
-  useEffect(() => {
-    if (location.state?.role) {
-      setSelectedRole(location.state.role);
+  // Get the pre-selected role from navigation state
+  const preSelectedRole = location.state?.role || "employee";
+
+  const [isLogin, setIsLogin] = useState(true);
+
+  // Set default credentials only for admin role
+  const [credentials, setCredentials] = useState({
+    username: preSelectedRole === "admin" ? "admin" : "",
+    password: preSelectedRole === "admin" ? "admin123" : "",
+  });
+
+  const [registerData, setRegisterData] = useState({
+    username: "",
+    password: "",
+    confirmPassword: "",
+    adminPasskey: "",
+  });
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const getRoleDisplayName = (role) => {
+    const roles = {
+      admin: "Admin",
+      employee: "Employee",
+      director: "Director",
+    };
+    return roles[role] || "User";
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const response = await login({
+        ...credentials,
+        role: preSelectedRole,
+      });
+      setUser(response);
+
+      // Redirect based on role
+      if (response.role === "ADMIN") {
+        navigate("/admin");
+      } else if (response.role === "EMPLOYEE") {
+        navigate("/employee");
+      } else if (response.role === "DIRECTOR") {
+        navigate("/director");
+      }
+    } catch (err) {
+      setError(err.message || "Invalid credentials. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  }, [location]);
+  };
 
-  const handleSubmit = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Demo credentials
-    const demoCredentials = {
-      admin: { username: "admin", password: "admin123" },
-      employee: { username: "scientist", password: "scientist123" },
-      director: { username: "director", password: "director123" },
-    };
+    // Validate passwords match
+    if (registerData.password !== registerData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
 
-    const validCreds = demoCredentials[selectedRole];
+    // Validate password length
+    if (registerData.password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
 
-    if (
-      credentials.username === validCreds.username &&
-      credentials.password === validCreds.password
-    ) {
-      login({
-        name:
-          credentials.username.charAt(0).toUpperCase() +
-          credentials.username.slice(1),
-        role: selectedRole,
-        id: Date.now(),
+    // Validate admin passkey if registering as admin
+    if (preSelectedRole === "admin") {
+      if (registerData.adminPasskey !== "DIPAS@ADMIN2026") {
+        setError("Invalid Admin Passkey");
+        return;
+      }
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await register({
+        username: registerData.username,
+        password: registerData.password,
+        role: preSelectedRole,
       });
 
-      // Navigate to appropriate dashboard
-      if (selectedRole === "admin") navigate("/admin");
-      else if (selectedRole === "employee") navigate("/employee");
-      else if (selectedRole === "director") navigate("/director");
-    } else {
-      setError("Invalid credentials");
+      // Auto login after successful registration
+      setUser(response);
+
+      if (response.role === "ADMIN") {
+        navigate("/admin");
+      } else if (response.role === "EMPLOYEE") {
+        navigate("/employee");
+      } else if (response.role === "DIRECTOR") {
+        navigate("/director");
+      }
+    } catch (err) {
+      setError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const roleConfig = {
-    admin: {
-      title: "Admin Login",
-      icon: "🔐",
-      color: "admin",
-      description: "Manage attendance records and notices",
-    },
-    employee: {
-      title: "Employee/Scientist Login",
-      icon: "👨‍🔬",
-      color: "employee",
-      description: "Access project management and notices",
-    },
-    director: {
-      title: "Director Login",
-      icon: "👔",
-      color: "director",
-      description: "View dashboards and manage approvals",
-    },
-  };
-
-  const currentRole = roleConfig[selectedRole];
-
   return (
     <div className="login-page">
-      <div className="login-background">
-        <div className="login-pattern"></div>
-        <div className="login-glow"></div>
-      </div>
+      <div className="login-card">
+        {/* DIPAS Logo */}
+        <div className="login-logo-container">
+          <img src={dipasLogo} alt="DIPAS Logo" className="login-logo" />
+          <h1 className="login-title">DIPAS</h1>
+          <p className="login-subtitle">
+            Defence Institute of Physiology & Allied Sciences
+          </p>
+        </div>
 
-      <div className="login-container">
-        <div className="login-card animate-fade-in-up">
-          <div className="login-header">
-            <div className={`login-icon icon-${currentRole.color}`}>
-              <span>{currentRole.icon}</span>
-            </div>
-            <h2 className="login-title">{currentRole.title}</h2>
-            <p className="login-description">{currentRole.description}</p>
-          </div>
+        {/* Role Badge */}
+        <div className="role-badge">
+          {getRoleDisplayName(preSelectedRole)}{" "}
+          {isLogin ? "Login" : "Registration"}
+        </div>
 
-          <div className="role-selector">
-            <button
-              className={`role-btn ${selectedRole === "admin" ? "active admin" : ""}`}
-              onClick={() => setSelectedRole("admin")}>
-              Admin
-            </button>
-            <button
-              className={`role-btn ${selectedRole === "employee" ? "active employee" : ""}`}
-              onClick={() => setSelectedRole("employee")}>
-              Employee
-            </button>
-            <button
-              className={`role-btn ${selectedRole === "director" ? "active director" : ""}`}
-              onClick={() => setSelectedRole("director")}>
-              Director
-            </button>
-          </div>
+        {/* Toggle Between Login and Register */}
+        <div className="auth-toggle">
+          <button
+            className={`toggle-btn ${isLogin ? "active" : ""}`}
+            onClick={() => {
+              setIsLogin(true);
+              setError("");
+            }}>
+            Login
+          </button>
+          <button
+            className={`toggle-btn ${!isLogin ? "active" : ""}`}
+            onClick={() => {
+              setIsLogin(false);
+              setError("");
+            }}>
+            Register
+          </button>
+        </div>
 
-          <form onSubmit={handleSubmit} className="login-form">
-            {error && (
-              <div className="error-message">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M12 8v4M12 16h.01"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                {error}
-              </div>
-            )}
-
+        {/* Login Form */}
+        {isLogin ? (
+          <form onSubmit={handleLogin} className="login-form">
             <div className="form-group">
-              <label className="form-label">Username</label>
+              <label htmlFor="username">Username</label>
               <input
                 type="text"
-                className="form-input"
-                placeholder="Enter your username"
+                id="username"
                 value={credentials.username}
                 onChange={(e) =>
                   setCredentials({ ...credentials, username: e.target.value })
                 }
+                placeholder="Enter your username"
                 required
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Password</label>
+              <label htmlFor="password">Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="password"
+                  value={credentials.password}
+                  onChange={(e) =>
+                    setCredentials({ ...credentials, password: e.target.value })
+                  }
+                  placeholder="Enter your password"
+                  required
+                />
+                <button
+                  type="button"
+                  className="toggle-password-text"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Toggle password visibility">
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </div>
+
+            {error && <div className="error-message">{error}</div>}
+
+            <button
+              type="submit"
+              className="login-submit-btn"
+              disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
+          </form>
+        ) : (
+          // Register Form
+          <form onSubmit={handleRegister} className="login-form">
+            <div className="form-group">
+              <label htmlFor="reg-username">Username</label>
               <input
-                type="password"
-                className="form-input"
-                placeholder="Enter your password"
-                value={credentials.password}
+                type="text"
+                id="reg-username"
+                value={registerData.username}
                 onChange={(e) =>
-                  setCredentials({ ...credentials, password: e.target.value })
+                  setRegisterData({ ...registerData, username: e.target.value })
                 }
+                placeholder="Choose a username"
                 required
               />
             </div>
 
-            <button
-              type="submit"
-              className={`btn btn-primary btn-login btn-${currentRole.color}`}>
-              Sign In
-            </button>
-          </form>
-
-          <div className="demo-credentials">
-            <p className="demo-title">Demo Credentials:</p>
-            <div className="demo-creds-list">
-              <div className="demo-item">
-                <strong>Admin:</strong> admin / admin123
-              </div>
-              <div className="demo-item">
-                <strong>Employee:</strong> scientist / scientist123
-              </div>
-              <div className="demo-item">
-                <strong>Director:</strong> director / director123
+            <div className="form-group">
+              <label htmlFor="reg-password">Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  id="reg-password"
+                  value={registerData.password}
+                  onChange={(e) =>
+                    setRegisterData({
+                      ...registerData,
+                      password: e.target.value,
+                    })
+                  }
+                  placeholder="Create a password (min 6 characters)"
+                  required
+                />
+                <button
+                  type="button"
+                  className="toggle-password-text"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label="Toggle password visibility">
+                  {showPassword ? "Hide" : "Show"}
+                </button>
               </div>
             </div>
-          </div>
+
+            <div className="form-group">
+              <label htmlFor="confirm-password">Confirm Password</label>
+              <input
+                type={showPassword ? "text" : "password"}
+                id="confirm-password"
+                value={registerData.confirmPassword}
+                onChange={(e) =>
+                  setRegisterData({
+                    ...registerData,
+                    confirmPassword: e.target.value,
+                  })
+                }
+                placeholder="Confirm your password"
+                required
+              />
+            </div>
+
+            {/* Admin Passkey Field */}
+            {preSelectedRole === "admin" && (
+              <div className="form-group admin-passkey">
+                <label htmlFor="admin-passkey">
+                  Admin Passkey <span className="required">*</span>
+                </label>
+                <input
+                  type="password"
+                  id="admin-passkey"
+                  value={registerData.adminPasskey}
+                  onChange={(e) =>
+                    setRegisterData({
+                      ...registerData,
+                      adminPasskey: e.target.value,
+                    })
+                  }
+                  placeholder="Enter admin passkey"
+                  required
+                />
+                <small className="passkey-hint">
+                  Contact system administrator for admin passkey
+                </small>
+              </div>
+            )}
+
+            {error && <div className="error-message">{error}</div>}
+
+            <button
+              type="submit"
+              className="login-submit-btn"
+              disabled={loading}>
+              {loading ? "Registering..." : "Register"}
+            </button>
+          </form>
+        )}
+
+        {/* Footer */}
+        <div className="login-footer">
+          <p>&copy; {new Date().getFullYear()} DIPAS. All rights reserved.</p>
         </div>
       </div>
     </div>
