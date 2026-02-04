@@ -15,10 +15,9 @@ const Login = () => {
 
   const [isLogin, setIsLogin] = useState(true);
 
-  // Set default credentials only for admin role
   const [credentials, setCredentials] = useState({
-    username: preSelectedRole === "admin" ? "admin" : "",
-    password: preSelectedRole === "admin" ? "admin123" : "",
+    username: "",
+    password: "",
   });
 
   const [registerData, setRegisterData] = useState({

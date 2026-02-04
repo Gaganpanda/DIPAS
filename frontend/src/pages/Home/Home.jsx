@@ -1,33 +1,29 @@
-import React from "react";
+import { useEffect, useState } from "react";
 import "./Home.css";
 
 const Home = () => {
-  const notices = [
-    {
-      id: 1,
-      title: "Annual Research Symposium 2026",
-      date: "28/01/2026",
-      pdf: "#",
-    },
-    {
-      id: 2,
-      title: "New Safety Protocols Implementation",
-      date: "25/01/2026",
-      pdf: "#",
-    },
-    {
-      id: 3,
-      title: "Project Submission Deadline Extended",
-      date: "20/01/2026",
-      pdf: "#",
-    },
-    {
-      id: 4,
-      title: "Laboratory Maintenance Schedule",
-      date: "18/01/2026",
-      pdf: "#",
-    },
-  ];
+  const [notices, setNotices] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:8080/api/notices")
+      .then((res) => res.json())
+      .then((data) => setNotices(data))
+      .catch((err) => console.error("Failed to fetch notices", err));
+  }, []);
+
+  // 🔒 FRONTEND SAFETY: Always show latest notice first
+  const sortedNotices = [...notices].sort(
+    (a, b) => new Date(b.noticeDate) - new Date(a.noticeDate),
+  );
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   return (
     <div className="home-wrapper">
@@ -52,18 +48,32 @@ const Home = () => {
           <h3>Notice Board</h3>
 
           <div className="notice-list">
-            {notices.map((notice) => (
-              <div key={notice.id} className="notice-item">
-                <div className="notice-title">{notice.title}</div>
+            {sortedNotices.length === 0 ? (
+              <p className="no-notice">No notices available</p>
+            ) : (
+              sortedNotices.map((notice) => (
+                <div key={notice.id} className="notice-item">
+                  {/* Title with tooltip */}
+                  <div className="notice-title" title={notice.title}>
+                    {notice.title}
+                  </div>
 
-                <div className="notice-footer">
-                  <span>{notice.date}</span>
-                  <a href={notice.pdf} className="notice-link">
-                    View PDF
-                  </a>
+                  <div className="notice-footer">
+                    <span className="notice-date">
+                      {formatDate(notice.noticeDate)}
+                    </span>
+
+                    <a
+                      href={`http://localhost:8080${notice.pdfUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="notice-link">
+                      View PDF
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </aside>
       </div>

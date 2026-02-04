@@ -1,13 +1,20 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import ashoka from "../../assets/ashoka.png";
 import dipasLogo from "../../assets/dipas-logo.png";
 import "./Navbar.css";
 
 const Navbar = () => {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const handleLogin = (role) => {
     navigate("/login", { state: { role } });
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/");
   };
 
   return (
@@ -30,10 +37,10 @@ const Navbar = () => {
         <img src={dipasLogo} alt="DIPAS Logo" className="dipas-logo" />
       </div>
 
-      {/* ===== MAIN NAV BAR (WHITE) ===== */}
+      {/* ===== MAIN NAV BAR ===== */}
       <nav className="drdo-navbar">
         <div className="drdo-nav-container">
-          {/* LEFT NAV LINKS */}
+          {/* LEFT LINKS */}
           <div className="drdo-nav-links">
             <Link to="/" className="drdo-link">
               Home
@@ -46,25 +53,38 @@ const Navbar = () => {
             </Link>
           </div>
 
-          {/* RIGHT LOGIN BUTTONS */}
+          {/* RIGHT ACTIONS */}
           <div className="drdo-login-buttons">
-            <button
-              className="login-btn admin"
-              onClick={() => handleLogin("admin")}>
-              Admin Login
-            </button>
+            {user ? (
+              <>
+                <span className="logged-user">
+                  {user.role} : {user.username}
+                </span>
+                <button className="login-btn logout" onClick={handleLogout}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="login-btn admin"
+                  onClick={() => handleLogin("admin")}>
+                  Admin Login
+                </button>
 
-            <button
-              className="login-btn employee"
-              onClick={() => handleLogin("employee")}>
-              Employee Login
-            </button>
+                <button
+                  className="login-btn employee"
+                  onClick={() => handleLogin("employee")}>
+                  Employee Login
+                </button>
 
-            <button
-              className="login-btn director"
-              onClick={() => handleLogin("director")}>
-              Director Login
-            </button>
+                <button
+                  className="login-btn director"
+                  onClick={() => handleLogin("director")}>
+                  Director Login
+                </button>
+              </>
+            )}
           </div>
         </div>
       </nav>

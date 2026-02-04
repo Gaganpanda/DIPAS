@@ -4,7 +4,7 @@ const API_URL = "http://localhost:8080/api/auth";
 
 export const login = async (credentials) => {
   try {
-    console.log("🔐 Sending login request:", {
+    console.log("Sending login request:", {
       username: credentials.username,
       role: credentials.role,
       password: "***hidden***"
@@ -16,10 +16,10 @@ export const login = async (credentials) => {
       role: credentials.role
     });
 
-    console.log("✅ Login successful:", response.data);
+    console.log("Login successful:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ Login error:", error.response?.data || error.message);
+    console.error("Login error:", error.response?.data || error.message);
     
     if (error.response?.data?.message) {
       throw new Error(error.response.data.message);
@@ -35,7 +35,7 @@ export const login = async (credentials) => {
 
 export const register = async (userData) => {
   try {
-    console.log("📝 Sending register request:", {
+    console.log("Sending register request:", {
       username: userData.username,
       role: userData.role,
       password: "***hidden***"

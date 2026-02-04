@@ -23,4 +23,12 @@ public class NoticeService {
     public Notice addNotice(Notice notice) {
         return repo.save(notice);
     }
+
+    public Notice getNoticeById(Long id) {
+        return repo.findById(id).orElse(null);
+    }
+
+    public void deleteNotice(Long id) {
+        repo.deleteById(id);
+    }
 }
