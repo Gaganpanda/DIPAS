@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
-  const { user, logout } = useAuth(); // ✅ FIXED
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [notices, setNotices] = useState([]);
@@ -17,14 +17,10 @@ const AdminDashboard = () => {
     file: null,
   });
 
-  // 🔐 Protect route
   useEffect(() => {
-    if (!user || user.role !== "ADMIN") {
-      navigate("/");
-    }
+    if (!user || user.role !== "ADMIN") navigate("/");
   }, [user, navigate]);
 
-  // 📥 Load notices
   useEffect(() => {
     fetchNotices();
   }, []);
@@ -32,17 +28,10 @@ const AdminDashboard = () => {
   const fetchNotices = async () => {
     try {
       const res = await fetch("http://localhost:8080/api/notices");
-      if (res.ok) {
-        const data = await res.json();
-        setNotices(data); // backend already sends DESC
-      }
+      if (res.ok) setNotices(await res.json());
     } catch (err) {
       console.error(err);
     }
-  };
-
-  const handleFileChange = (e) => {
-    setFormData({ ...formData, file: e.target.files[0] });
   };
 
   const handleSubmit = async (e) => {
@@ -52,7 +41,7 @@ const AdminDashboard = () => {
     setLoading(true);
 
     if (!formData.title || !formData.file) {
-      setError("Please fill all fields");
+      setError("All fields are mandatory");
       setLoading(false);
       return;
     }
@@ -62,7 +51,7 @@ const AdminDashboard = () => {
     try {
       const fd = new FormData();
       fd.append("title", formData.title);
-      fd.append("noticeDate", today); // ✅ auto date
+      fd.append("noticeDate", today);
       fd.append("file", formData.file);
 
       const res = await fetch("http://localhost:8080/api/notices", {
@@ -72,47 +61,43 @@ const AdminDashboard = () => {
 
       if (!res.ok) throw new Error();
 
-      setSuccess("Notice added successfully");
+      setSuccess("Notice published successfully");
       setFormData({ title: "", file: null });
       document.getElementById("file-input").value = "";
       fetchNotices();
     } catch {
-      setError("Failed to add notice");
+      setError("Unable to publish notice");
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this notice?")) return;
-
+    if (!window.confirm("Are you sure you want to delete this notice?")) return;
     try {
       const res = await fetch(`http://localhost:8080/api/notices/${id}`, {
         method: "DELETE",
       });
-
       if (!res.ok) throw new Error();
-
       fetchNotices();
     } catch {
-      setError("Delete failed");
+      setError("Deletion failed");
     }
   };
 
   if (!user || user.role !== "ADMIN") return null;
 
   return (
-    <div className="admin-dashboard">
-      <div className="dashboard-container">
-        {/* ===== HEADER ===== */}
-        <div className="dashboard-header dashboard-header-flex">
-          <div>
-            <h1>Admin Dashboard</h1>
-            <p>Welcome, {user.username}!</p>
-          </div>
+    <section className="admin-shell">
+      <header className="admin-header">
+        <div>
+          <h1>Administration Panel</h1>
+          <span>Notice Management System</span>
+        </div>
 
+        <div className="admin-user">
+          <span>{user.username}</span>
           <button
-            className="logout-btn"
             onClick={() => {
               logout();
               navigate("/");
@@ -120,82 +105,83 @@ const AdminDashboard = () => {
             Logout
           </button>
         </div>
+      </header>
 
-        <div className="dashboard-content">
-          {/* ===== ADD NOTICE ===== */}
-          <div className="add-notice-section">
-            <h2>Add New Notice</h2>
+      <main className="admin-grid">
+        {/* PUBLISH */}
+        <article className="card publish-card">
+          <h2>Publish Notice</h2>
 
-            <form onSubmit={handleSubmit} className="notice-form">
-              <div className="form-group">
-                <label>Notice Title *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  placeholder="Enter notice title"
-                  required
-                />
-              </div>
+          <form onSubmit={handleSubmit}>
+            <label>
+              Notice Title
+              <input
+                type="text"
+                placeholder="Official notice title"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
+              />
+            </label>
 
-              <div className="form-group">
-                <label>Upload PDF *</label>
-                <input
-                  type="file"
-                  id="file-input"
-                  accept=".pdf"
-                  onChange={handleFileChange}
-                  required
-                />
-              </div>
+            <label className="file-upload">
+              Upload PDF
+              <input
+                type="file"
+                id="file-input"
+                accept=".pdf"
+                onChange={(e) =>
+                  setFormData({ ...formData, file: e.target.files[0] })
+                }
+              />
+            </label>
 
-              {error && <div className="error-message">{error}</div>}
-              {success && <div className="success-message">{success}</div>}
+            {error && <p className="alert error">{error}</p>}
+            {success && <p className="alert success">{success}</p>}
 
-              <button className="submit-btn" disabled={loading}>
-                {loading ? "Adding..." : "Add Notice"}
-              </button>
-            </form>
+            <button type="submit" disabled={loading}>
+              {loading ? "Publishing..." : "Publish Notice"}
+            </button>
+          </form>
+        </article>
+
+        {/* LIST */}
+        <article className="card list-card">
+          <div className="list-header">
+            <h2>Published Notices</h2>
+            <span>{notices.length} total</span>
           </div>
 
-          {/* ===== NOTICE LIST ===== */}
-          <div className="notices-section">
-            <h2>All Notices ({notices.length})</h2>
+          <div className="notice-scroll">
+            {notices.length === 0 && (
+              <div className="empty-state">No notices published</div>
+            )}
 
-            <div className="notices-list">
-              {notices.map((n) => (
-                <div key={n.id} className="notice-item">
-                  <div className="notice-info">
-                    <h3>{n.title}</h3>
-                    <span className="notice-date">
-                      {new Date(n.noticeDate).toLocaleDateString("en-IN")}
-                    </span>
-                  </div>
-
-                  <div className="notice-actions">
-                    <a
-                      href={`http://localhost:8080${n.pdfUrl}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="view-btn">
-                      View PDF
-                    </a>
-
-                    <button
-                      className="delete-btn"
-                      onClick={() => handleDelete(n.id)}>
-                      Delete
-                    </button>
-                  </div>
+            {notices.map((n) => (
+              <div key={n.id} className="notice-row">
+                <div>
+                  <h3>{n.title}</h3>
+                  <small>
+                    {new Date(n.noticeDate).toLocaleDateString("en-IN")}
+                  </small>
                 </div>
-              ))}
-            </div>
+
+                <div className="row-actions">
+                  <a
+                    href={`http://localhost:8080${n.pdfUrl}`}
+                    target="_blank"
+                    rel="noreferrer">
+                    View
+                  </a>
+                  <button onClick={() => handleDelete(n.id)}>Delete</button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      </div>
-    </div>
+        </article>
+      </main>
+    </section>
   );
 };
 
