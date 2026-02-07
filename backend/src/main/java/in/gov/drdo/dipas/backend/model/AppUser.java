@@ -9,6 +9,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class AppUser {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -22,5 +23,9 @@ public class AppUser {
     @Column(nullable = false)
     private String role;
 
-    // getters & setters
+    @Column(nullable = false)
+    private String designation;   // ✅ NOT NULL
+
+    @Column(nullable = false)
+    private boolean approved;
 }

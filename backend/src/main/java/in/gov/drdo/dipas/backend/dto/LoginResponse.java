@@ -1,18 +1,16 @@
 package in.gov.drdo.dipas.backend.dto;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
+@AllArgsConstructor
 public class LoginResponse {
+    private Long id;
     private String username;
     private String role;
-    private String message;
+    private String designation; // ✅ REQUIRED
 
-    public LoginResponse(String username, String role, String message) {
-        this.username = username;
-        this.role = role;
-        this.message = message;
-    }
-
-    public String getUsername() { return username; }
-    public String getRole() { return role; }
-    public String getMessage() { return message; }
+    // getters & setters
 }
-

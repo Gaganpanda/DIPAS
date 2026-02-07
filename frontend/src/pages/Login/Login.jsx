@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { login, register } from "../../api/authApi";
 import { useAuth } from "../../context/AuthContext";
@@ -10,10 +10,17 @@ const Login = () => {
   const location = useLocation();
   const { setUser } = useAuth();
 
-  // Get the pre-selected role from navigation state
+  // role passed like /login (state.role)
   const preSelectedRole = location.state?.role || "employee";
 
+  const isAdmin = preSelectedRole === "admin";
+  const isDirector = preSelectedRole === "director";
+  const isEmployee = preSelectedRole === "employee";
+
   const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [credentials, setCredentials] = useState({
     username: "",
@@ -25,21 +32,17 @@ const Login = () => {
     password: "",
     confirmPassword: "",
     adminPasskey: "",
+    designation: "",
   });
 
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  /* 🔒 Director always login-only */
+  useEffect(() => {
+    if (isDirector) setIsLogin(true);
+  }, [isDirector]);
 
-  const getRoleDisplayName = (role) => {
-    const roles = {
-      admin: "Admin",
-      employee: "Employee",
-      director: "Director",
-    };
-    return roles[role] || "User";
-  };
-
+  /* ======================
+        LOGIN HANDLER
+     ====================== */
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -47,71 +50,103 @@ const Login = () => {
 
     try {
       const response = await login({
-        ...credentials,
+        username: credentials.username,
+        password: credentials.password,
         role: preSelectedRole,
       });
-      setUser(response);
 
-      // Redirect based on role
-      if (response.role === "ADMIN") {
-        navigate("/admin");
-      } else if (response.role === "EMPLOYEE") {
-        navigate("/employee");
-      } else if (response.role === "DIRECTOR") {
-        navigate("/director");
+      if (!response?.role) {
+        throw new Error("Invalid server response");
       }
+
+      const userData = {
+        ...response,
+        role: response.role.toUpperCase(),
+      };
+
+      // 🔒 Role validation
+      if (userData.role !== preSelectedRole.toUpperCase()) {
+        throw new Error("Role mismatch");
+      }
+
+      setUser(userData);
+
+      if (userData.role === "ADMIN") navigate("/admin");
+      else if (userData.role === "DIRECTOR") navigate("/director");
+      else navigate("/employee");
     } catch (err) {
-      setError(err.message || "Invalid credentials. Please try again.");
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Invalid username or password",
+      );
     } finally {
       setLoading(false);
     }
   };
 
+  /* ======================
+        REGISTER HANDLER
+     ====================== */
   const handleRegister = async (e) => {
     e.preventDefault();
     setError("");
 
-    // Validate passwords match
     if (registerData.password !== registerData.confirmPassword) {
       setError("Passwords do not match");
       return;
     }
 
-    // Validate password length
     if (registerData.password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
     }
 
-    // Validate admin passkey if registering as admin
-    if (preSelectedRole === "admin") {
-      if (registerData.adminPasskey !== "DIPAS@ADMIN2026") {
-        setError("Invalid Admin Passkey");
-        return;
-      }
+    if (isEmployee && !registerData.designation) {
+      setError("Designation is required");
+      return;
+    }
+
+    if (isAdmin && registerData.adminPasskey !== "DIPAS@ADMIN2026") {
+      setError("Invalid Admin Passkey");
+      return;
     }
 
     setLoading(true);
 
     try {
-      const response = await register({
+      await register({
+        username: registerData.username,
+        password: registerData.password,
+        role: preSelectedRole,
+        adminKey: registerData.adminPasskey,
+        designation: registerData.designation,
+      });
+
+      // 🟡 Employee waits for director approval
+      if (isEmployee) {
+        setError("Registration successful. Awaiting Director approval.");
+        setIsLogin(true);
+        return;
+      }
+
+      // Auto-login admin
+      const response = await login({
         username: registerData.username,
         password: registerData.password,
         role: preSelectedRole,
       });
 
-      // Auto login after successful registration
-      setUser(response);
+      setUser({
+        ...response,
+        role: response.role.toUpperCase(),
+      });
 
-      if (response.role === "ADMIN") {
-        navigate("/admin");
-      } else if (response.role === "EMPLOYEE") {
-        navigate("/employee");
-      } else if (response.role === "DIRECTOR") {
-        navigate("/director");
-      }
+      navigate("/admin");
     } catch (err) {
-      setError(err.message || "Registration failed. Please try again.");
+      setError(
+        err.response?.data?.message || err.message || "Registration failed",
+      );
     } finally {
       setLoading(false);
     }
@@ -120,7 +155,7 @@ const Login = () => {
   return (
     <div className="login-page">
       <div className="login-card">
-        {/* DIPAS Logo */}
+        {/* LOGO */}
         <div className="login-logo-container">
           <img src={dipasLogo} alt="DIPAS Logo" className="login-logo" />
           <h1 className="login-title">DIPAS</h1>
@@ -129,67 +164,62 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Role Badge */}
+        {/* ROLE BADGE */}
         <div className="role-badge">
-          {getRoleDisplayName(preSelectedRole)}{" "}
-          {isLogin ? "Login" : "Registration"}
+          {preSelectedRole.toUpperCase()} {isLogin ? "LOGIN" : "REGISTRATION"}
         </div>
 
-        {/* Toggle Between Login and Register */}
-        <div className="auth-toggle">
-          <button
-            className={`toggle-btn ${isLogin ? "active" : ""}`}
-            onClick={() => {
-              setIsLogin(true);
-              setError("");
-            }}>
-            Login
-          </button>
-          <button
-            className={`toggle-btn ${!isLogin ? "active" : ""}`}
-            onClick={() => {
-              setIsLogin(false);
-              setError("");
-            }}>
-            Register
-          </button>
-        </div>
+        {/* TOGGLE — ADMIN & EMPLOYEE ONLY */}
+        {!isDirector && (
+          <div className="auth-toggle">
+            <button
+              className={`toggle-btn ${isLogin ? "active" : ""}`}
+              onClick={() => {
+                setIsLogin(true);
+                setError("");
+              }}>
+              Login
+            </button>
+            <button
+              className={`toggle-btn ${!isLogin ? "active" : ""}`}
+              onClick={() => {
+                setIsLogin(false);
+                setError("");
+              }}>
+              Register
+            </button>
+          </div>
+        )}
 
-        {/* Login Form */}
+        {/* LOGIN FORM */}
         {isLogin ? (
           <form onSubmit={handleLogin} className="login-form">
             <div className="form-group">
-              <label htmlFor="username">Username</label>
+              <label>Username</label>
               <input
-                type="text"
-                id="username"
                 value={credentials.username}
                 onChange={(e) =>
                   setCredentials({ ...credentials, username: e.target.value })
                 }
-                placeholder="Enter your username"
                 required
               />
             </div>
 
             <div className="form-group">
-              <label htmlFor="password">Password</label>
+              <label>Password</label>
               <div className="password-input-wrapper">
                 <input
                   type={showPassword ? "text" : "password"}
-                  id="password"
                   value={credentials.password}
                   onChange={(e) =>
                     setCredentials({ ...credentials, password: e.target.value })
                   }
-                  placeholder="Enter your password"
                   required
                 />
                 <button
                   type="button"
                   className="toggle-password-text"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label="Toggle password visibility">
+                  onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
@@ -197,61 +227,46 @@ const Login = () => {
 
             {error && <div className="error-message">{error}</div>}
 
-            <button
-              type="submit"
-              className="login-submit-btn"
-              disabled={loading}>
+            <button className="login-submit-btn" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </button>
           </form>
         ) : (
-          // Register Form
+          /* REGISTER FORM */
           <form onSubmit={handleRegister} className="login-form">
             <div className="form-group">
-              <label htmlFor="reg-username">Username</label>
+              <label>Username</label>
               <input
-                type="text"
-                id="reg-username"
                 value={registerData.username}
                 onChange={(e) =>
-                  setRegisterData({ ...registerData, username: e.target.value })
+                  setRegisterData({
+                    ...registerData,
+                    username: e.target.value,
+                  })
                 }
-                placeholder="Choose a username"
                 required
               />
             </div>
 
             <div className="form-group">
-              <label htmlFor="reg-password">Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="reg-password"
-                  value={registerData.password}
-                  onChange={(e) =>
-                    setRegisterData({
-                      ...registerData,
-                      password: e.target.value,
-                    })
-                  }
-                  placeholder="Create a password (min 6 characters)"
-                  required
-                />
-                <button
-                  type="button"
-                  className="toggle-password-text"
-                  onClick={() => setShowPassword(!showPassword)}
-                  aria-label="Toggle password visibility">
-                  {showPassword ? "Hide" : "Show"}
-                </button>
-              </div>
+              <label>Password</label>
+              <input
+                type="password"
+                value={registerData.password}
+                onChange={(e) =>
+                  setRegisterData({
+                    ...registerData,
+                    password: e.target.value,
+                  })
+                }
+                required
+              />
             </div>
 
             <div className="form-group">
-              <label htmlFor="confirm-password">Confirm Password</label>
+              <label>Confirm Password</label>
               <input
-                type={showPassword ? "text" : "password"}
-                id="confirm-password"
+                type="password"
                 value={registerData.confirmPassword}
                 onChange={(e) =>
                   setRegisterData({
@@ -259,20 +274,31 @@ const Login = () => {
                     confirmPassword: e.target.value,
                   })
                 }
-                placeholder="Confirm your password"
                 required
               />
             </div>
 
-            {/* Admin Passkey Field */}
-            {preSelectedRole === "admin" && (
+            {isEmployee && (
+              <div className="form-group">
+                <label>Designation</label>
+                <input
+                  value={registerData.designation}
+                  onChange={(e) =>
+                    setRegisterData({
+                      ...registerData,
+                      designation: e.target.value,
+                    })
+                  }
+                  required
+                />
+              </div>
+            )}
+
+            {isAdmin && (
               <div className="form-group admin-passkey">
-                <label htmlFor="admin-passkey">
-                  Admin Passkey <span className="required">*</span>
-                </label>
+                <label>Admin Passkey</label>
                 <input
                   type="password"
-                  id="admin-passkey"
                   value={registerData.adminPasskey}
                   onChange={(e) =>
                     setRegisterData({
@@ -280,29 +306,21 @@ const Login = () => {
                       adminPasskey: e.target.value,
                     })
                   }
-                  placeholder="Enter admin passkey"
                   required
                 />
-                <small className="passkey-hint">
-                  Contact system administrator for admin passkey
-                </small>
               </div>
             )}
 
             {error && <div className="error-message">{error}</div>}
 
-            <button
-              type="submit"
-              className="login-submit-btn"
-              disabled={loading}>
+            <button className="login-submit-btn" disabled={loading}>
               {loading ? "Registering..." : "Register"}
             </button>
           </form>
         )}
 
-        {/* Footer */}
         <div className="login-footer">
-          <p>&copy; {new Date().getFullYear()} DIPAS. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} DIPAS</p>
         </div>
       </div>
     </div>
