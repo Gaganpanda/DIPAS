@@ -96,7 +96,7 @@ const AdminDashboard = () => {
         </div>
 
         <div className="admin-user">
-          <span>{user.username}</span>
+          <span>{user.username?.toUpperCase()}</span>
           <button
             onClick={() => {
               logout();

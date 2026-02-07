@@ -1,11 +1,14 @@
+/* ================================
+   GLOBAL ROOT
+================================ */
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: #111827;
+  background-color: #ffffff;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,28 +16,51 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ================================
+   LINKS
+================================ */
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #2563eb;
   text-decoration: inherit;
 }
+
 a:hover {
-  color: #535bf2;
+  color: #1d4ed8;
 }
 
+/* ================================
+   BODY (IMPORTANT FIX)
+================================ */
+/* ❌ REMOVED flex & center alignment */
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  font-family: inherit;
 }
 
+/* ✅ When navbar is visible */
+body.with-navbar {
+  padding-top: 190px; /* height of navbar */
+}
+
+/* ✅ Dashboards & login (no navbar) */
+body.no-navbar {
+  padding-top: 0;
+}
+
+/* ================================
+   HEADINGS
+================================ */
 h1 {
   font-size: 3.2em;
   line-height: 1.1;
 }
 
+/* ================================
+   BUTTONS
+================================ */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -42,27 +68,37 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: #0a2342;
+  color: #ffffff;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: all 0.25s ease;
 }
 
+button:hover {
+  border-color: #2563eb;
+  background-color: #1e3a5f;
+}
+
+button:focus,
+button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.4);
+  outline-offset: 2px;
+}
+
+/* ================================
+   LIGHT MODE OVERRIDE
+================================ */
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
     background-color: #ffffff;
   }
+
   a:hover {
-    color: #747bff;
+    color: #1d4ed8;
   }
+
   button {
-    background-color: #f9f9f9;
+    background-color: #0a2342;
   }
 }
