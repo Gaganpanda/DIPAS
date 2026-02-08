@@ -160,7 +160,7 @@ const AdminDashboard = () => {
                   <line x1="9" y1="15" x2="15" y2="15" />
                 </svg>
               </div>
-              <h2>Publish Notice</h2>
+              <h2>Publish Notice </h2>
             </div>
 
             <form onSubmit={handleSubmit}>
