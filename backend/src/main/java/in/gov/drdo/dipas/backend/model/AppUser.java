@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users")   // ✅ matches PostgreSQL table name
 @Getter
 @Setter
 public class AppUser {
@@ -21,11 +21,11 @@ public class AppUser {
     private String password;
 
     @Column(nullable = false)
-    private String role;
+    private String role;          // DIRECTOR / EMPLOYEE / ADMIN
 
     @Column(nullable = false)
-    private String designation;   // ✅ NOT NULL
+    private String designation;   // NOT NULL
 
     @Column(nullable = false)
-    private boolean approved;
+    private boolean approved = false;   // default false
 }

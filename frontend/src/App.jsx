@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import Home from "./pages/Home/Home";
 import Login from "./pages/Login/Login";
+import About from "./pages/About/About";
+import Organization from "./pages/OrganizationStructure/Organization";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
 import DirectorDashboard from "./pages/director/DirectorDashboard";
 import EmployeeDashboard from "./pages/Employee/EmployeeDashboard";
@@ -27,6 +29,8 @@ const Layout = () => {
         {/* Public */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/organization" element={<Organization />} />
 
         {/* Admin */}
         <Route
@@ -59,7 +63,9 @@ const Layout = () => {
         />
       </Routes>
 
-      {!hideLayout && <Footer />}
+      {!hideLayout && !location.pathname.startsWith("/organization") && (
+        <Footer />
+      )}
     </>
   );
 };
