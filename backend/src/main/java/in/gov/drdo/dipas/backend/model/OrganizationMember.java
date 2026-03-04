@@ -26,4 +26,8 @@ public class OrganizationMember {
     private String imageUrl;
 
     private boolean isHead = false;
+
+    // ✅ NEW: used for drag-and-drop ordering in admin panel
+    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private Integer displayOrder = 0;
 }

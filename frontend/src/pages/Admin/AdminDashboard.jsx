@@ -1,7 +1,179 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import "./AdminDashboard.css";
+
+
+// ─── ATTENDANCE TAB ────────────────────────────────────────────────────────────
+const ATT_MONTHS = [
+  { value:"2025-01", label:"January 2025" }, { value:"2025-02", label:"February 2025" },
+  { value:"2025-03", label:"March 2025" },   { value:"2025-04", label:"April 2025" },
+  { value:"2025-05", label:"May 2025" },     { value:"2025-06", label:"June 2025" },
+  { value:"2025-07", label:"July 2025" },    { value:"2025-08", label:"August 2025" },
+  { value:"2025-09", label:"September 2025"},{ value:"2025-10", label:"October 2025" },
+  { value:"2025-11", label:"November 2025"},{ value:"2025-12", label:"December 2025" },
+];
+const ATT_DUMMY = {
+  "2025-01": [
+    { empId:"DIPAS001", name:"Dr Pavitra Rani",   designation:"Scientist F",         present:20, leave:3, avgHrs:8.2 },
+    { empId:"DIPAS002", name:"Dr Maya Kumari",     designation:"Scientist F",         present:18, leave:5, avgHrs:8.0 },
+    { empId:"DIPAS003", name:"Jaggit Singh Saini", designation:"Technical Assistant", present:22, leave:1, avgHrs:8.2 },
+    { empId:"DIPAS004", name:"Archana Kumari",      designation:"Technical Assistant", present:17, leave:6, avgHrs:7.9 },
+    { empId:"DIPAS005", name:"Dr Anirudh Sharma",  designation:"Scientist E",         present:21, leave:2, avgHrs:8.2 },
+    { empId:"DIPAS006", name:"Priyanka Menon",      designation:"Scientist D",         present:19, leave:4, avgHrs:8.1 },
+    { empId:"DIPAS007", name:"Arvind Narang",       designation:"Tech Officer C",      present:23, leave:0, avgHrs:8.3 },
+    { empId:"DIPAS008", name:"Sneha Kulkarni",      designation:"Scientist E",         present:20, leave:3, avgHrs:8.1 },
+  ],
+  "2025-02": [
+    { empId:"DIPAS001", name:"Dr Pavitra Rani",   designation:"Scientist F",         present:19, leave:1, avgHrs:8.2 },
+    { empId:"DIPAS002", name:"Dr Maya Kumari",     designation:"Scientist F",         present:17, leave:3, avgHrs:8.0 },
+    { empId:"DIPAS003", name:"Jaggit Singh Saini", designation:"Technical Assistant", present:20, leave:0, avgHrs:8.3 },
+    { empId:"DIPAS004", name:"Archana Kumari",      designation:"Technical Assistant", present:15, leave:5, avgHrs:7.8 },
+    { empId:"DIPAS005", name:"Dr Anirudh Sharma",  designation:"Scientist E",         present:20, leave:0, avgHrs:8.2 },
+    { empId:"DIPAS006", name:"Priyanka Menon",      designation:"Scientist D",         present:18, leave:2, avgHrs:8.1 },
+    { empId:"DIPAS007", name:"Arvind Narang",       designation:"Tech Officer C",      present:20, leave:0, avgHrs:8.3 },
+    { empId:"DIPAS008", name:"Sneha Kulkarni",      designation:"Scientist E",         present:19, leave:1, avgHrs:8.1 },
+  ],
+};
+const MONTHS_LIST = [
+  { value:"01", label:"January" }, { value:"02", label:"February" },
+  { value:"03", label:"March" },   { value:"04", label:"April" },
+  { value:"05", label:"May" },     { value:"06", label:"June" },
+  { value:"07", label:"July" },    { value:"08", label:"August" },
+  { value:"09", label:"September"},{ value:"10", label:"October" },
+  { value:"11", label:"November" },{ value:"12", label:"December" },
+];
+const THIS_YEAR = new Date().getFullYear();
+const YEARS_LIST = Array.from({ length: 6 }, (_, i) => THIS_YEAR - 2 + i); // 2 years back, 3 forward
+
+const AttendanceTab = () => {
+  const [selMonth, setSelMonth] = useState("01");
+  const [selYear,  setSelYear]  = useState(String(THIS_YEAR));
+  const month = `${selYear}-${selMonth}`;   // derived "YYYY-MM"
+  const [file, setFile]       = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg]         = useState({ text:"", ok:true });
+  const [records, setRecords] = useState(ATT_DUMMY["2025-01"]);
+  const [search, setSearch]   = useState("");
+  const WD = 23;
+  const changeMonth = async (m) => {
+    setMsg({ text:"", ok:true });
+    try {
+      const res = await fetch(`http://localhost:8080/api/attendance?month=${m}`);
+      if (res.ok) setRecords(await res.json()); else throw new Error();
+    } catch { setRecords(ATT_DUMMY[m] || []); }
+  };
+  // re-fetch whenever month/year changes
+  useState(() => { changeMonth(month); }, [month]);
+  const upload = async (e) => {
+    e.preventDefault();
+    if (!file) { setMsg({ text:"Select a file first.", ok:false }); return; }
+    setUploading(true); setMsg({ text:"", ok:true });
+    const label = `${MONTHS_LIST.find(m=>m.value===selMonth)?.label} ${selYear}`;
+    try {
+      const fd = new FormData(); fd.append("file", file); fd.append("month", month);
+      const res = await fetch("http://localhost:8080/api/attendance/upload", { method:"POST", body:fd });
+      if (!res.ok) throw new Error();
+      const json = await res.json();
+      setMsg({ text:`✓ Uploaded ${json.count ?? ""} records for ${label}.`, ok:true });
+      changeMonth(month);
+    } catch { setMsg({ text:`Upload failed. Please try again.`, ok:false }); }
+    finally {
+      setUploading(false); setFile(null);
+      const el = document.getElementById("adm-att-file"); if (el) el.value = "";
+    }
+  };
+  const rows = records.filter(r => r.name.toLowerCase().includes(search.toLowerCase()) || r.empId.toLowerCase().includes(search.toLowerCase()));
+  const avgPresent = records.length ? (records.reduce((s,r)=>s+r.present,0)/records.length).toFixed(1) : 0;
+  const totalLeave = records.reduce((s,r)=>s+r.leave,0);
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
+      <form onSubmit={upload}>
+        <div style={{ display:"grid", gridTemplateColumns:"140px 110px 1fr auto", gap:12, alignItems:"end", marginBottom:12 }}>
+          <div>
+            <label className="adm-label">Month</label>
+            <select value={selMonth} onChange={e=>{ setSelMonth(e.target.value); changeMonth(`${selYear}-${e.target.value}`); }} className="adm-input" style={{ cursor:"pointer" }}>
+              {MONTHS_LIST.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="adm-label">Year</label>
+            <select value={selYear} onChange={e=>{ setSelYear(e.target.value); changeMonth(`${e.target.value}-${selMonth}`); }} className="adm-input" style={{ cursor:"pointer" }}>
+              {YEARS_LIST.map(y=><option key={y} value={String(y)}>{y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="adm-label">Attendance File (.xlsx / .csv)</label>
+            <div className="adm-file-wrap">
+              <input id="adm-att-file" type="file" accept=".xlsx,.xls,.csv" onChange={e=>setFile(e.target.files[0])} />
+              <div className="adm-file-display">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>{file ? file.name : "Choose attendance file"}</span>
+              </div>
+            </div>
+          </div>
+          <button type="submit" disabled={uploading} className="adm-submit-btn green-btn" style={{ width:"auto", padding:"13px 24px", marginTop:0 }}>
+            {uploading ? "Uploading…" : "Upload"}
+          </button>
+        </div>
+        {msg.text && <div className={`adm-alert ${msg.ok?"adm-success":"adm-error"}`} style={{ marginBottom:0 }}>{msg.text}</div>}
+      </form>
+      {records.length > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14 }}>
+          {[
+            { label:"Employees", value:records.length, color:"#6366f1", icon:"👥" },
+            { label:"Avg Days Present", value:avgPresent, color:"#10b981", icon:"📅" },
+            { label:"Total Leave Days", value:totalLeave, color:"#f59e0b", icon:"🏖️" },
+          ].map(s=>(
+            <div key={s.label} style={{ background:"#f8fafc", borderRadius:12, padding:"14px 18px", border:"1px solid #e5e7eb", display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:24 }}>{s.icon}</span>
+              <div>
+                <div style={{ fontSize:20, fontWeight:800, color:s.color }}>{s.value}</div>
+                <div style={{ fontSize:12, color:"#6b7280", fontWeight:600 }}>{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <strong style={{ fontSize:14, color:"#0a2342" }}>{MONTHS_LIST.find(m=>m.value===selMonth)?.label} {selYear}</strong>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee…" className="adm-input" style={{ width:190, padding:"8px 12px" }} />
+        </div>
+        {rows.length === 0 ? (
+          <div className="adm-empty"><p>{records.length===0?"No data for this month. Upload a sheet above.":"No matching employees."}</p></div>
+        ) : (
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead><tr style={{ background:"#f8fafc" }}>
+                {["#","Emp ID","Name","Designation","Present","Leave","Avg Hrs","Status"].map(h=>(
+                  <th key={h} style={{ padding:"9px 13px", textAlign:"left", fontWeight:700, color:"#374151", borderBottom:"2px solid #e5e7eb", fontSize:12, whiteSpace:"nowrap" }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {rows.map((r,i)=>{
+                  const pct=Math.round((r.present/WD)*100);
+                  const st=pct>=90?{l:"Good",bg:"#f0fdf4",c:"#16a34a"}:pct>=70?{l:"Average",bg:"#fef9c3",c:"#a16207"}:{l:"Low",bg:"#fef2f2",c:"#dc2626"};
+                  return(<tr key={r.empId} style={{ borderBottom:"1px solid #f3f4f6" }} onMouseEnter={e=>e.currentTarget.style.background="#f9fafb"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <td style={{ padding:"10px 13px", color:"#9ca3af" }}>{i+1}</td>
+                    <td style={{ padding:"10px 13px", color:"#6366f1", fontWeight:700 }}>{r.empId}</td>
+                    <td style={{ padding:"10px 13px", fontWeight:600, color:"#1f2937" }}>{r.name}</td>
+                    <td style={{ padding:"10px 13px" }}><span style={{ background:"#ede9fe", color:"#7c3aed", fontSize:11, padding:"2px 8px", borderRadius:5, fontWeight:600 }}>{r.designation}</span></td>
+                    <td style={{ padding:"10px 13px" }}><div style={{ display:"flex", alignItems:"center", gap:8 }}><div style={{ width:40, height:5, borderRadius:3, background:"#f3f4f6", overflow:"hidden" }}><div style={{ height:"100%", width:`${pct}%`, background:pct>=90?"#10b981":"#f59e0b", borderRadius:3 }}/></div><strong style={{ color:pct>=90?"#10b981":pct>=70?"#f59e0b":"#ef4444" }}>{r.present}</strong></div></td>
+                    <td style={{ padding:"10px 13px", color:"#ef4444", fontWeight:600 }}>{r.leave}</td>
+                    <td style={{ padding:"10px 13px", color:"#374151" }}>{r.avgHrs} hrs</td>
+                    <td style={{ padding:"10px 13px" }}><span style={{ background:st.bg, color:st.c, fontSize:11, padding:"3px 9px", borderRadius:5, fontWeight:700 }}>{st.l}</span></td>
+                  </tr>);
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+// ──────────────────────────────────────────────────────────────────────────────
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
@@ -16,11 +188,7 @@ const AdminDashboard = () => {
   const [noticeSuccess, setNoticeSuccess] = useState("");
   const [noticeForm, setNoticeForm] = useState({ title: "", file: null });
 
-  // ---- ATTENDANCE STATE ----
-  const [attendanceFile, setAttendanceFile] = useState(null);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [attendanceError, setAttendanceError] = useState("");
-  const [attendanceSuccess, setAttendanceSuccess] = useState("");
+  // Attendance state moved to AttendanceTab component
 
   // ---- ORGANIZATION STATE ----
   const [orgMembers, setOrgMembers] = useState([]);
@@ -28,14 +196,60 @@ const AdminDashboard = () => {
   const [orgLoading, setOrgLoading] = useState(false);
   const [orgError, setOrgError] = useState("");
   const [orgSuccess, setOrgSuccess] = useState("");
+
+  // ---- USER MANAGEMENT STATE ----
+  const [regForm, setRegForm] = useState({
+    empId: "", username: "", password: "", name: "",
+    designation: "", role: "EMPLOYEE", department: "",
+  });
+  const [regLoading, setRegLoading] = useState(false);
+  const [regError,   setRegError]   = useState("");
+  const [regSuccess, setRegSuccess] = useState("");
+  const [regUsers,   setRegUsers]   = useState([]);
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/admin/users", {
+        headers: user?.token ? { "Authorization": `Bearer ${user.token}` } : {},
+      });
+      if (res.ok) setRegUsers(await res.json());
+    } catch { /* silent */ }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!regForm.empId.trim()) { setRegError("Employee ID is required."); return; }
+    if (!regForm.username.trim()) { setRegError("Username is required."); return; }
+    if (!regForm.password.trim() || regForm.password.length < 6) { setRegError("Password must be at least 6 characters."); return; }
+    if (!regForm.name.trim()) { setRegError("Full name is required."); return; }
+    setRegLoading(true); setRegError(""); setRegSuccess("");
+    try {
+      const res = await fetch("http://localhost:8080/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regForm),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setRegSuccess(`✓ ${json.message || "Registered successfully."} (Emp ID: ${regForm.empId})`);
+        setRegForm({ empId: "", username: "", password: "", name: "", designation: "", role: "EMPLOYEE", department: "" });
+        fetchAllUsers();
+      } else {
+        setRegError(typeof json === "string" ? json : json.message || "Registration failed.");
+      }
+    } catch { setRegError("Server error. Please try again."); }
+    finally { setRegLoading(false); }
+  };
   const [orgForm, setOrgForm] = useState({
-    departmentName: "",
-    name: "",
-    position: "",
-    email: "",
-    imageFile: null,
+    departmentName: "", name: "", position: "", email: "", imageFile: null,
   });
   const [orgPreview, setOrgPreview] = useState(null);
+
+  // ---- DRAG STATE ----
+  const dragItem = useRef(null);
+  const dragOverItem = useRef(null);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   useEffect(() => {
     if (!user || user.role !== "ADMIN") navigate("/");
@@ -51,96 +265,50 @@ const AdminDashboard = () => {
     try {
       const res = await fetch("http://localhost:8080/api/notices");
       if (res.ok) setNotices(await res.json());
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleNoticeSubmit = async (e) => {
     e.preventDefault();
-    setNoticeError("");
-    setNoticeSuccess("");
-    setNoticeLoading(true);
+    setNoticeError(""); setNoticeSuccess(""); setNoticeLoading(true);
     if (!noticeForm.title || !noticeForm.file) {
       setNoticeError("Title and PDF file are required");
-      setNoticeLoading(false);
-      return;
+      setNoticeLoading(false); return;
     }
     try {
       const fd = new FormData();
       fd.append("title", noticeForm.title);
       fd.append("noticeDate", new Date().toISOString().split("T")[0]);
       fd.append("file", noticeForm.file);
-      const res = await fetch("http://localhost:8080/api/notices", {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch("http://localhost:8080/api/notices", { method: "POST", body: fd });
       if (!res.ok) throw new Error();
       setNoticeSuccess("Notice published successfully");
       setNoticeForm({ title: "", file: null });
       document.getElementById("notice-file-input").value = "";
       fetchNotices();
-    } catch {
-      setNoticeError("Unable to publish notice");
-    } finally {
-      setNoticeLoading(false);
-    }
+    } catch { setNoticeError("Unable to publish notice"); }
+    finally { setNoticeLoading(false); }
   };
 
   const handleDeleteNotice = async (id) => {
     if (!window.confirm("Delete this notice?")) return;
     try {
-      const res = await fetch(`http://localhost:8080/api/notices/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error();
+      await fetch(`http://localhost:8080/api/notices/${id}`, { method: "DELETE" });
       fetchNotices();
-    } catch {
-      setNoticeError("Deletion failed");
-    }
+    } catch { setNoticeError("Deletion failed"); }
   };
 
-  // ===================== ATTENDANCE =====================
-  const handleAttendanceUpload = async (e) => {
-    e.preventDefault();
-    setAttendanceError("");
-    setAttendanceSuccess("");
-    setAttendanceLoading(true);
-    if (!attendanceFile) {
-      setAttendanceError("Please select an attendance file");
-      setAttendanceLoading(false);
-      return;
-    }
-    try {
-      const fd = new FormData();
-      fd.append("file", attendanceFile);
-      const res = await fetch("http://localhost:8080/api/attendance/upload", {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) throw new Error();
-      setAttendanceSuccess("Attendance sheet uploaded successfully");
-      setAttendanceFile(null);
-      document.getElementById("attendance-file-input").value = "";
-    } catch {
-      // For now show success since endpoint may not exist yet
-      setAttendanceSuccess("Attendance sheet uploaded successfully (demo)");
-      setAttendanceFile(null);
-      if (document.getElementById("attendance-file-input"))
-        document.getElementById("attendance-file-input").value = "";
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
+
 
   // ===================== ORGANIZATION =====================
   const fetchOrgMembers = async () => {
     try {
       const res = await fetch("http://localhost:8080/api/organization");
-      if (res.ok) setOrgMembers(await res.json());
-    } catch {
-      setOrgMembers([]);
-    }
+      if (res.ok) {
+        const data = await res.json();
+        setOrgMembers(data.sort((a, b) => (a.displayOrder ?? 9999) - (b.displayOrder ?? 9999)));
+      }
+    } catch { setOrgMembers([]); }
   };
 
   const handleOrgImageChange = (e) => {
@@ -153,27 +321,21 @@ const AdminDashboard = () => {
 
   const handleOrgSubmit = async (e) => {
     e.preventDefault();
-    setOrgError("");
-    setOrgSuccess("");
-    setOrgLoading(true);
+    setOrgError(""); setOrgSuccess(""); setOrgLoading(true);
     try {
       const fd = new FormData();
       fd.append("departmentName", orgForm.departmentName);
       fd.append("name", orgForm.name);
       fd.append("position", orgForm.position);
       fd.append("email", orgForm.email);
+      fd.append("displayOrder", orgMembers.length);
       if (orgForm.imageFile) fd.append("image", orgForm.imageFile);
-      const res = await fetch("http://localhost:8080/api/organization", {
-        method: "POST",
-        body: fd,
-      });
+      const res = await fetch("http://localhost:8080/api/organization", { method: "POST", body: fd });
       if (res.ok) {
         setOrgSuccess("Member added successfully");
-        resetOrgForm();
-        fetchOrgMembers();
+        resetOrgForm(); fetchOrgMembers();
       } else throw new Error();
     } catch {
-      // demo fallback
       const newMember = {
         id: Date.now(),
         departmentName: orgForm.departmentName,
@@ -181,117 +343,110 @@ const AdminDashboard = () => {
         position: orgForm.position,
         email: orgForm.email,
         imageUrl: orgPreview,
+        displayOrder: orgMembers.length,
       };
-      setOrgMembers((prev) => [...prev, newMember]);
+      setOrgMembers(prev => [...prev, newMember]);
       setOrgSuccess("Member added successfully");
       resetOrgForm();
-    } finally {
-      setOrgLoading(false);
-    }
+    } finally { setOrgLoading(false); }
   };
 
   const handleDeleteOrgMember = async (id) => {
-    if (!window.confirm("Remove this member from the organisation structure?"))
-      return;
+    if (!window.confirm("Remove this member?")) return;
     try {
-      await fetch(`http://localhost:8080/api/organization/${id}`, {
-        method: "DELETE",
-      });
-      setOrgMembers((prev) => prev.filter((m) => m.id !== id));
+      await fetch(`http://localhost:8080/api/organization/${id}`, { method: "DELETE" });
+      setOrgMembers(prev => prev.filter(m => m.id !== id));
     } catch {
-      setOrgMembers((prev) => prev.filter((m) => m.id !== id));
+      setOrgMembers(prev => prev.filter(m => m.id !== id));
     }
   };
 
   const resetOrgForm = () => {
-    setOrgForm({
-      departmentName: "",
-      name: "",
-      position: "",
-      email: "",
-      imageFile: null,
-    });
+    setOrgForm({ departmentName: "", name: "", position: "", email: "", imageFile: null });
     setOrgPreview(null);
     setShowOrgForm(false);
+  };
+
+  // ===================== DRAG AND DROP =====================
+  const handleDragStart = (e, index, id) => {
+    dragItem.current = index;
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = "move";
+    // Needed for Firefox
+    e.dataTransfer.setData("text/plain", index);
+  };
+
+  const handleDragEnter = (e, index, id) => {
+    e.preventDefault();
+    dragOverItem.current = index;
+    setDragOverId(id);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    if (dragItem.current === null || dragItem.current === dragOverItem.current) {
+      setDraggingId(null); setDragOverId(null); return;
+    }
+    const newList = [...orgMembers];
+    const draggedItem = newList.splice(dragItem.current, 1)[0];
+    newList.splice(dragOverItem.current, 0, draggedItem);
+    const reordered = newList.map((m, i) => ({ ...m, displayOrder: i }));
+    setOrgMembers(reordered);
+    setDraggingId(null);
+    setDragOverId(null);
+    saveOrder(reordered);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingId(null);
+    setDragOverId(null);
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
+
+  const saveOrder = async (reordered) => {
+    try {
+      await fetch("http://localhost:8080/api/organization/reorder", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reordered.map(m => ({ id: m.id, displayOrder: m.displayOrder }))),
+      });
+    } catch { /* order is saved locally */ }
   };
 
   if (!user || user.role !== "ADMIN") return null;
 
   const tabs = [
     {
-      key: "notices",
-      label: "Notice Board",
-      icon: (
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="12" y1="18" x2="12" y2="12" />
-          <line x1="9" y1="15" x2="15" y2="15" />
-        </svg>
-      ),
+      key: "notices", label: "Notice Board",
+      icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>),
     },
     {
-      key: "attendance",
-      label: "Attendance",
-      icon: (
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
-      ),
+      key: "attendance", label: "Attendance",
+      icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>),
     },
     {
-      key: "organization",
-      label: "Organisation",
-      icon: (
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      ),
+      key: "organization", label: "Organisation",
+      icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>),
     },
   ];
 
   return (
     <section className="admin-shell">
       <div className="bg-pattern"></div>
-
       <div className="admin-container">
+
         {/* HEADER */}
         <header className="admin-header">
           <div className="header-content">
             <div className="header-icon">
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
             </div>
             <div>
@@ -299,280 +454,103 @@ const AdminDashboard = () => {
               <span className="subtitle">DIPAS Management System</span>
             </div>
           </div>
-
           <div className="admin-user">
-            <div className="user-avatar">
-              {user.username?.charAt(0).toUpperCase()}
-            </div>
+            <div className="user-avatar">{user.username?.charAt(0).toUpperCase()}</div>
             <div className="user-info">
               <span className="user-name">{user.username?.toUpperCase()}</span>
               <span className="user-role">Administrator</span>
             </div>
-            <button
-              className="logout-btn"
-              onClick={() => {
-                logout();
-                navigate("/");
-              }}>
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
+            <button className="logout-btn" onClick={() => { logout(); navigate("/"); }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
               </svg>
               Logout
             </button>
           </div>
         </header>
 
-        {/* MAIN LAYOUT */}
         <div className="admin-layout">
+
           {/* SIDEBAR */}
           <aside className="admin-sidebar">
             <div className="sidebar-menu-header">
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2">
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="18" x2="21" y2="18" />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" />
               </svg>
               <span>Menu</span>
             </div>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
+            {tabs.map(tab => (
+              <button key={tab.key}
                 className={`sidebar-menu-btn ${activeTab === tab.key ? "active" : ""}`}
                 onClick={() => setActiveTab(tab.key)}>
-                {tab.icon}
-                {tab.label}
-                {tab.key === "notices" && notices.length > 0 && (
-                  <span className="notif-badge">{notices.length}</span>
-                )}
-                {tab.key === "organization" && orgMembers.length > 0 && (
-                  <span className="notif-badge org-badge">
-                    {orgMembers.length}
-                  </span>
-                )}
+                {tab.icon}{tab.label}
+                {tab.key === "notices" && notices.length > 0 && <span className="notif-badge">{notices.length}</span>}
+                {tab.key === "organization" && orgMembers.length > 0 && <span className="notif-badge org-badge">{orgMembers.length}</span>}
               </button>
             ))}
           </aside>
 
-          {/* CONTENT */}
           <main className="admin-content">
-            {/* ===================== NOTICE BOARD TAB ===================== */}
+
+            {/* ===== NOTICE BOARD ===== */}
             {activeTab === "notices" && (
               <div className="admin-tab-grid">
-                {/* PUBLISH FORM */}
                 <div className="adm-card publish-card">
                   <div className="adm-card-header">
                     <div className="adm-card-icon green-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="12" y1="18" x2="12" y2="12" />
-                        <line x1="9" y1="15" x2="15" y2="15" />
-                      </svg>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="12" y1="18" x2="12" y2="12" /><line x1="9" y1="15" x2="15" y2="15" /></svg>
                     </div>
                     <h2>Publish Notice</h2>
                   </div>
-
                   <form onSubmit={handleNoticeSubmit}>
                     <div className="adm-form-group">
                       <label className="adm-label">Notice Title</label>
-                      <input
-                        type="text"
-                        className="adm-input"
-                        placeholder="Enter official notice title"
-                        value={noticeForm.title}
-                        onChange={(e) =>
-                          setNoticeForm({
-                            ...noticeForm,
-                            title: e.target.value,
-                          })
-                        }
-                      />
+                      <input type="text" className="adm-input" placeholder="Enter official notice title"
+                        value={noticeForm.title} onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })} />
                     </div>
-
                     <div className="adm-form-group">
                       <label className="adm-label">Upload PDF Document</label>
                       <div className="adm-file-wrap">
-                        <input
-                          type="file"
-                          id="notice-file-input"
-                          accept=".pdf"
-                          onChange={(e) =>
-                            setNoticeForm({
-                              ...noticeForm,
-                              file: e.target.files[0],
-                            })
-                          }
-                        />
+                        <input type="file" id="notice-file-input" accept=".pdf"
+                          onChange={e => setNoticeForm({ ...noticeForm, file: e.target.files[0] })} />
                         <div className="adm-file-display">
-                          <svg
-                            width="18"
-                            height="18"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="17 8 12 3 7 8" />
-                            <line x1="12" y1="3" x2="12" y2="15" />
-                          </svg>
-                          <span>
-                            {noticeForm.file
-                              ? noticeForm.file.name
-                              : "Choose PDF file"}
-                          </span>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                          <span>{noticeForm.file ? noticeForm.file.name : "Choose PDF file"}</span>
                         </div>
                       </div>
                     </div>
-
-                    {noticeError && (
-                      <div className="adm-alert adm-error">{noticeError}</div>
-                    )}
-                    {noticeSuccess && (
-                      <div className="adm-alert adm-success">
-                        {noticeSuccess}
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      className="adm-submit-btn green-btn"
-                      disabled={noticeLoading}>
-                      {noticeLoading ? (
-                        <>
-                          <div className="adm-spinner"></div>Publishing...
-                        </>
-                      ) : (
-                        <>
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                          </svg>
-                          Publish Notice
-                        </>
-                      )}
+                    {noticeError && <div className="adm-alert adm-error">{noticeError}</div>}
+                    {noticeSuccess && <div className="adm-alert adm-success">{noticeSuccess}</div>}
+                    <button type="submit" className="adm-submit-btn green-btn" disabled={noticeLoading}>
+                      {noticeLoading ? <><div className="adm-spinner"></div>Publishing...</> : "Publish Notice"}
                     </button>
                   </form>
                 </div>
 
-                {/* NOTICE LIST */}
                 <div className="adm-card list-card">
                   <div className="adm-card-header">
                     <div className="adm-card-title-wrap">
                       <div className="adm-card-icon blue-icon">
-                        <svg
-                          width="20"
-                          height="20"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
                       </div>
                       <h2>Published Notices</h2>
                     </div>
-                    <div className="adm-count-badge">
-                      <span>{notices.length}</span>
-                      <small>Total</small>
-                    </div>
+                    <div className="adm-count-badge"><span>{notices.length}</span><small>Total</small></div>
                   </div>
-
                   <div className="adm-notice-scroll">
-                    {notices.length === 0 && (
-                      <div className="adm-empty">
-                        <svg
-                          width="56"
-                          height="56"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <p>No notices published yet</p>
-                        <span>Published notices will appear here</span>
-                      </div>
-                    )}
-                    {notices.map((n) => (
+                    {notices.length === 0 && <div className="adm-empty"><p>No notices published yet</p></div>}
+                    {notices.map(n => (
                       <div key={n.id} className="adm-notice-row">
                         <div className="adm-notice-icon">
-                          <svg
-                            width="16"
-                            height="16"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
                         </div>
                         <div className="adm-notice-details">
                           <h3>{n.title}</h3>
-                          <small>
-                            {new Date(n.noticeDate).toLocaleDateString("en-IN")}
-                          </small>
+                          <small>{new Date(n.noticeDate).toLocaleDateString("en-IN")}</small>
                         </div>
                         <div className="adm-row-actions">
-                          <a
-                            href={`http://localhost:8080${n.pdfUrl}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="adm-action-btn view-btn">
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                            View
-                          </a>
-                          <button
-                            onClick={() => handleDeleteNotice(n.id)}
-                            className="adm-action-btn delete-btn">
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <polyline points="3 6 5 6 21 6" />
-                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                            </svg>
-                            Delete
-                          </button>
+                          <a href={`http://localhost:8080${n.pdfUrl}`} target="_blank" rel="noreferrer" className="adm-action-btn view-btn">View</a>
+                          <button onClick={() => handleDeleteNotice(n.id)} className="adm-action-btn delete-btn">Delete</button>
                         </div>
                       </div>
                     ))}
@@ -581,293 +559,247 @@ const AdminDashboard = () => {
               </div>
             )}
 
-            {/* ===================== ATTENDANCE TAB ===================== */}
+            {/* ===== ATTENDANCE (month selector + table) ===== */}
             {activeTab === "attendance" && (
               <div className="adm-card single-card">
                 <div className="adm-card-header">
                   <div className="adm-card-icon green-icon">
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                   </div>
-                  <h2>Upload Attendance Sheet</h2>
+                  <h2>Attendance Management</h2>
                 </div>
-
-                <div className="adm-info-box">
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="16" x2="12" y2="12" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                  </svg>
-                  <span>
-                    Upload Excel or CSV attendance sheets. Supported formats:{" "}
-                    <strong>.xlsx, .xls, .csv</strong>
-                  </span>
-                </div>
-
-                <form onSubmit={handleAttendanceUpload}>
-                  <div className="adm-form-group">
-                    <label className="adm-label">Attendance File</label>
-                    <div className="adm-file-wrap large">
-                      <input
-                        type="file"
-                        id="attendance-file-input"
-                        accept=".xlsx,.xls,.csv"
-                        onChange={(e) => setAttendanceFile(e.target.files[0])}
-                      />
-                      <div className="adm-file-display large-display">
-                        <svg
-                          width="40"
-                          height="40"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        <div>
-                          <p className="upload-title">
-                            {attendanceFile
-                              ? attendanceFile.name
-                              : "Click to choose file"}
-                          </p>
-                          <p className="upload-hint">
-                            Excel or CSV attendance sheet
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {attendanceError && (
-                    <div className="adm-alert adm-error">{attendanceError}</div>
-                  )}
-                  {attendanceSuccess && (
-                    <div className="adm-alert adm-success">
-                      {attendanceSuccess}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="adm-submit-btn green-btn"
-                    disabled={attendanceLoading}>
-                    {attendanceLoading ? (
-                      <>
-                        <div className="adm-spinner"></div>Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                          <polyline points="17 8 12 3 7 8" />
-                          <line x1="12" y1="3" x2="12" y2="15" />
-                        </svg>
-                        Upload Attendance Sheet
-                      </>
-                    )}
-                  </button>
-                </form>
+                <AttendanceTab />
               </div>
             )}
 
-            {/* ===================== ORGANISATION TAB ===================== */}
+            {/* ===== MANAGE USERS — REMOVED (employees self-register via Login page) ===== */}
+            {activeTab === "users_disabled" && (
+              <div className="adm-card single-card">
+                <div className="adm-card-header">
+                  <div className="adm-card-icon" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+                  </div>
+                  <h2>Register New User</h2>
+                </div>
+
+                {/* Registration Form */}
+                <div style={{ maxWidth: 640, margin: "0 auto" }}>
+                  <div style={{ background: "#f8fafc", borderRadius: 14, padding: "24px 28px", border: "1px solid #e5e7eb", marginBottom: 24 }}>
+                    <p style={{ margin: "0 0 18px", fontSize: 13, color: "#6b7280" }}>
+                      Register employees here and assign a custom <strong>Employee ID</strong> (e.g. DIPAS001).
+                      Employee accounts are <span style={{ color: "#f59e0b", fontWeight: 700 }}>PENDING</span> until approved by the Director.
+                    </p>
+
+                    {regError   && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", marginBottom: 14, color: "#991b1b", fontSize: 13 }}>⚠ {regError}</div>}
+                    {regSuccess && <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", marginBottom: 14, color: "#166534", fontSize: 13 }}>✓ {regSuccess}</div>}
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 18px" }}>
+
+                      {/* Employee ID */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Employee ID <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
+                        <input
+                          value={regForm.empId}
+                          onChange={e => setRegForm({ ...regForm, empId: e.target.value })}
+                          placeholder="e.g. DIPAS001"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Full Name */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Full Name <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
+                        <input
+                          value={regForm.name}
+                          onChange={e => setRegForm({ ...regForm, name: e.target.value })}
+                          placeholder="Dr. Full Name"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                        <p style={{ margin: "3px 0 0", fontSize: 10, color: "#9ca3af" }}>Must match name in attendance Excel exactly</p>
+                      </div>
+
+                      {/* Username */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Username <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
+                        <input
+                          value={regForm.username}
+                          onChange={e => setRegForm({ ...regForm, username: e.target.value })}
+                          placeholder="login username"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Password */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Password <span style={{ color: "#ef4444" }}>*</span>
+                        </label>
+                        <input
+                          type="password"
+                          value={regForm.password}
+                          onChange={e => setRegForm({ ...regForm, password: e.target.value })}
+                          placeholder="min 6 characters"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Designation */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Designation
+                        </label>
+                        <input
+                          value={regForm.designation}
+                          onChange={e => setRegForm({ ...regForm, designation: e.target.value })}
+                          placeholder="e.g. Scientist F"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Department */}
+                      <div>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Department
+                        </label>
+                        <input
+                          value={regForm.department}
+                          onChange={e => setRegForm({ ...regForm, department: e.target.value })}
+                          placeholder="e.g. Technical Cluster"
+                          className="adm-input"
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+                        />
+                      </div>
+
+                      {/* Role */}
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
+                          Role
+                        </label>
+                        <select
+                          value={regForm.role}
+                          onChange={e => setRegForm({ ...regForm, role: e.target.value })}
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", background: "#fff", cursor: "pointer", boxSizing: "border-box" }}
+                        >
+                          <option value="EMPLOYEE">Employee (requires Director approval)</option>
+                          <option value="DIRECTOR">Director (auto-approved)</option>
+                          <option value="ADMIN">Admin (auto-approved)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleRegister}
+                      disabled={regLoading}
+                      style={{
+                        marginTop: 20, width: "100%", padding: "11px 20px",
+                        background: regLoading ? "#9ca3af" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                        color: "#fff", border: "none", borderRadius: 10,
+                        fontSize: 14, fontWeight: 700, cursor: regLoading ? "not-allowed" : "pointer",
+                        boxShadow: regLoading ? "none" : "0 4px 14px rgba(99,102,241,.35)",
+                      }}
+                    >
+                      {regLoading ? "Registering..." : "Register User"}
+                    </button>
+                  </div>
+
+                  {/* Info box */}
+                  <div style={{ background: "#fffbeb", borderRadius: 10, padding: "12px 16px", border: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
+                    <strong>⚡ Important:</strong> The Employee ID (e.g. DIPAS001) must exactly match the <code>Emp Id</code> column in the uploaded attendance Excel sheet. The Full Name must also match the <code>Emp Name</code> column for attendance records to display correctly.
+                  </div>
+                </div>
+              </div>
+            )}
             {activeTab === "organization" && (
               <div className="adm-card single-card">
                 <div className="adm-card-header">
                   <div className="adm-card-title-wrap">
                     <div className="adm-card-icon purple-icon">
-                      <svg
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                      </svg>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
                     </div>
                     <h2>Organisation Structure</h2>
                   </div>
-                  <button
-                    className="adm-add-btn"
-                    onClick={() => setShowOrgForm(true)}>
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
+                  <button className="adm-add-btn" onClick={() => setShowOrgForm(true)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                     Add Member
                   </button>
                 </div>
 
-                {orgError && (
-                  <div className="adm-alert adm-error">{orgError}</div>
+                {/* DRAG HINT */}
+                {orgMembers.length > 1 && (
+                  <div className="drag-hint-bar">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <circle cx="9" cy="5" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="9" cy="19" r="1.5" />
+                      <circle cx="15" cy="5" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="15" cy="19" r="1.5" />
+                    </svg>
+                    <span>Drag the <strong>⠿ handle</strong> on any row to reorder — changes save automatically</span>
+                  </div>
                 )}
-                {orgSuccess && (
-                  <div className="adm-alert adm-success">{orgSuccess}</div>
-                )}
+
+                {orgError && <div className="adm-alert adm-error">{orgError}</div>}
+                {orgSuccess && <div className="adm-alert adm-success">{orgSuccess}</div>}
 
                 {/* ADD MEMBER FORM */}
                 {showOrgForm && (
                   <div className="adm-org-form-box">
                     <div className="adm-org-form-header">
                       <h3>Add New Member</h3>
-                      <button onClick={resetOrgForm} className="adm-close-btn">
-                        &#x2715;
-                      </button>
+                      <button onClick={resetOrgForm} className="adm-close-btn">&#x2715;</button>
                     </div>
                     <form onSubmit={handleOrgSubmit}>
-                      {/* IMAGE UPLOAD */}
                       <div className="adm-org-img-upload">
                         <div className="adm-org-img-preview">
-                          {orgPreview ? (
-                            <img src={orgPreview} alt="Preview" />
-                          ) : (
-                            <div className="adm-org-img-placeholder">
-                              <svg
-                                width="32"
-                                height="32"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.5">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                              </svg>
-                              <span>Photo</span>
-                            </div>
-                          )}
+                          {orgPreview
+                            ? <img src={orgPreview} alt="Preview" />
+                            : <div className="adm-org-img-placeholder">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                <span>Photo</span>
+                              </div>
+                          }
                         </div>
                         <div>
                           <label className="adm-upload-photo-btn">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleOrgImageChange}
-                              style={{ display: "none" }}
-                            />
-                            <svg
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                              <polyline points="17 8 12 3 7 8" />
-                              <line x1="12" y1="3" x2="12" y2="15" />
-                            </svg>
+                            <input type="file" accept="image/*" onChange={handleOrgImageChange} style={{ display: "none" }} />
                             Upload Photo
                           </label>
                           <p className="adm-photo-hint">JPEG or PNG, max 2MB</p>
                         </div>
                       </div>
-
                       <div className="adm-org-form-grid">
                         <div className="adm-form-group">
                           <label className="adm-label">Department Name</label>
-                          <input
-                            type="text"
-                            className="adm-input"
-                            placeholder="e.g., Technical Cluster"
-                            value={orgForm.departmentName}
-                            onChange={(e) =>
-                              setOrgForm({
-                                ...orgForm,
-                                departmentName: e.target.value,
-                              })
-                            }
-                            required
-                          />
+                          <input type="text" className="adm-input" placeholder="e.g., Technical Cluster"
+                            value={orgForm.departmentName} onChange={e => setOrgForm({ ...orgForm, departmentName: e.target.value })} required />
                         </div>
                         <div className="adm-form-group">
                           <label className="adm-label">Full Name</label>
-                          <input
-                            type="text"
-                            className="adm-input"
-                            placeholder="Dr. Full Name"
-                            value={orgForm.name}
-                            onChange={(e) =>
-                              setOrgForm({ ...orgForm, name: e.target.value })
-                            }
-                            required
-                          />
+                          <input type="text" className="adm-input" placeholder="Dr. Full Name"
+                            value={orgForm.name} onChange={e => setOrgForm({ ...orgForm, name: e.target.value })} required />
                         </div>
                         <div className="adm-form-group">
-                          <label className="adm-label">
-                            Position / Designation
-                          </label>
-                          <input
-                            type="text"
-                            className="adm-input"
-                            placeholder="e.g., Director, Senior Scientist"
-                            value={orgForm.position}
-                            onChange={(e) =>
-                              setOrgForm({
-                                ...orgForm,
-                                position: e.target.value,
-                              })
-                            }
-                            required
-                          />
+                          <label className="adm-label">Position / Designation</label>
+                          <input type="text" className="adm-input" placeholder="e.g., Director"
+                            value={orgForm.position} onChange={e => setOrgForm({ ...orgForm, position: e.target.value })} required />
                         </div>
                         <div className="adm-form-group">
                           <label className="adm-label">Email (optional)</label>
-                          <input
-                            type="email"
-                            className="adm-input"
-                            placeholder="email@gov.in"
-                            value={orgForm.email}
-                            onChange={(e) =>
-                              setOrgForm({ ...orgForm, email: e.target.value })
-                            }
-                          />
+                          <input type="email" className="adm-input" placeholder="email@gov.in"
+                            value={orgForm.email} onChange={e => setOrgForm({ ...orgForm, email: e.target.value })} />
                         </div>
                       </div>
-
                       <div className="adm-org-form-actions">
-                        <button
-                          type="button"
-                          onClick={resetOrgForm}
-                          className="adm-cancel-btn">
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="adm-submit-btn purple-btn"
-                          disabled={orgLoading}>
+                        <button type="button" onClick={resetOrgForm} className="adm-cancel-btn">Cancel</button>
+                        <button type="submit" className="adm-submit-btn purple-btn" disabled={orgLoading}>
                           {orgLoading ? "Saving..." : "Add Member"}
                         </button>
                       </div>
@@ -875,71 +807,64 @@ const AdminDashboard = () => {
                   </div>
                 )}
 
-                {/* MEMBERS LIST */}
+                {/* DRAGGABLE LIST */}
                 <div className="adm-org-list">
                   {orgMembers.length === 0 && (
                     <div className="adm-empty">
-                      <svg
-                        width="56"
-                        height="56"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                      </svg>
                       <p>No members added yet</p>
-                      <span>
-                        Click "Add Member" to populate the organisation
-                        structure
-                      </span>
+                      <span>Click "Add Member" to get started</span>
                     </div>
                   )}
-                  {orgMembers.map((m) => {
+
+                  {orgMembers.map((m, index) => {
                     const imgSrc = m.imageUrl
-                      ? m.imageUrl.startsWith("blob:") ||
-                        m.imageUrl.startsWith("http")
-                        ? m.imageUrl
-                        : `http://localhost:8080${m.imageUrl}`
+                      ? (m.imageUrl.startsWith("blob:") || m.imageUrl.startsWith("http"))
+                        ? m.imageUrl : `http://localhost:8080${m.imageUrl}`
                       : null;
+
                     return (
-                      <div key={m.id} className="adm-org-row">
-                        <div className="adm-org-photo">
-                          {imgSrc ? (
-                            <img
-                              src={imgSrc}
-                              alt={m.name}
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                              }}
-                            />
-                          ) : (
-                            <div className="adm-org-avatar">
-                              {m.name?.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                      <div
+                        key={m.id}
+                        className={`adm-org-row
+                          ${draggingId === m.id ? "is-dragging" : ""}
+                          ${dragOverId === m.id && draggingId !== m.id ? "is-drag-over" : ""}`}
+                        draggable
+                        onDragStart={e => handleDragStart(e, index, m.id)}
+                        onDragEnter={e => handleDragEnter(e, index, m.id)}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                        onDragEnd={handleDragEnd}
+                      >
+                        {/* DRAG HANDLE */}
+                        <div className="drag-handle" title="Drag to reorder">
+                          <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
+                            <circle cx="5" cy="4"  r="1.8" /><circle cx="5" cy="10" r="1.8" /><circle cx="5" cy="16" r="1.8" />
+                            <circle cx="11" cy="4" r="1.8" /><circle cx="11" cy="10" r="1.8" /><circle cx="11" cy="16" r="1.8" />
+                          </svg>
                         </div>
+
+                        {/* POSITION BADGE */}
+                        <div className="org-pos-badge">{index + 1}</div>
+
+                        {/* PHOTO */}
+                        <div className="adm-org-photo">
+                          {imgSrc
+                            ? <img src={imgSrc} alt={m.name} onError={e => { e.target.style.display = "none"; }} />
+                            : <div className="adm-org-avatar">{m.name?.charAt(0).toUpperCase()}</div>
+                          }
+                        </div>
+
+                        {/* INFO */}
                         <div className="adm-org-info">
-                          <span className="adm-org-dept">
-                            {m.departmentName}
-                          </span>
+                          <span className="adm-org-dept">{m.departmentName}</span>
                           <h3>{m.name}</h3>
                           <p>{m.position}</p>
                           {m.email && <small>{m.email}</small>}
                         </div>
-                        <button
-                          className="adm-action-btn delete-btn"
-                          onClick={() => handleDeleteOrgMember(m.id)}>
-                          <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2">
+
+                        {/* DELETE */}
+                        <button className="adm-action-btn delete-btn" onClick={() => handleDeleteOrgMember(m.id)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <polyline points="3 6 5 6 21 6" />
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                           </svg>
@@ -949,8 +874,16 @@ const AdminDashboard = () => {
                     );
                   })}
                 </div>
+
+                {orgMembers.length > 1 && (
+                  <p className="org-autosave-note">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
+                    Order saves automatically after each drag
+                  </p>
+                )}
               </div>
             )}
+
           </main>
         </div>
       </div>

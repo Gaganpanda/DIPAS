@@ -34,7 +34,8 @@ public class AuthService {
             throw new RuntimeException("Role mismatch");
         }
 
-        if (!user.isApproved()) {
+        // ✅ APPROVAL CHECK USING STATUS
+        if (!"APPROVED".equalsIgnoreCase(user.getStatus())) {
             throw new RuntimeException("Account pending approval");
         }
 
@@ -42,9 +43,8 @@ public class AuthService {
                 user.getId(),
                 user.getUsername(),
                 user.getRole(),
-                user.getDesignation()   // ✅ ADD THIS
+                user.getDesignation()
         );
-
     }
 
     /* ================= REGISTER ================= */
@@ -68,14 +68,15 @@ public class AuthService {
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setRole(request.getRole().toUpperCase());
+        user.setDesignation(request.getDesignation());
 
-        // ✅ FIX FOR designation NOT NULL
-        if ("ADMIN".equalsIgnoreCase(request.getRole())) {
-            user.setDesignation("ADMIN");
-            user.setApproved(true);
+        // ✅ STATUS LOGIC (replaces approved boolean)
+        if ("ADMIN".equalsIgnoreCase(request.getRole()) ||
+                "DIRECTOR".equalsIgnoreCase(request.getRole())) {
+
+            user.setStatus("APPROVED");  // Admin/Director auto-approved
         } else {
-            user.setDesignation(request.getDesignation());
-            user.setApproved(false);
+            user.setStatus("PENDING");   // Employees must be approved by Director
         }
 
         userRepo.save(user);
@@ -84,7 +85,7 @@ public class AuthService {
                 user.getId(),
                 user.getUsername(),
                 user.getRole(),
-                user.getDesignation()   // ✅ ADD THIS
+                user.getDesignation()
         );
     }
 }

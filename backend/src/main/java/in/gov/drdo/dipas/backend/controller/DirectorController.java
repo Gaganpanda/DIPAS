@@ -1,70 +1,77 @@
 package in.gov.drdo.dipas.backend.controller;
 
-import in.gov.drdo.dipas.backend.dto.ProjectResponse;
 import in.gov.drdo.dipas.backend.model.AppUser;
-import in.gov.drdo.dipas.backend.model.Project;
 import in.gov.drdo.dipas.backend.repository.AppUserRepository;
-import in.gov.drdo.dipas.backend.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/director")
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5175"})
 @RequiredArgsConstructor
-@CrossOrigin
 public class DirectorController {
 
-    private final AppUserRepository repo;
-    private final ProjectRepository projectRepository;
+    private final AppUserRepository userRepository;
 
+    // ── List all PENDING employee registrations ──────────────────────────────
     @GetMapping("/pending")
-    public List<AppUser> pendingEmployees() {
-        return repo.findByApprovedFalseAndRole("EMPLOYEE");
+    public ResponseEntity<List<Map<String, Object>>> getPendingUsers() {
+        List<AppUser> pending = userRepository.findByStatus("PENDING");
+        List<Map<String, Object>> result = pending.stream().map(u -> Map.<String, Object>of(
+                "id",          u.getId(),
+                "empId",       u.getEmpId() != null ? u.getEmpId() : "",
+                "username",    u.getUsername(),
+                "name",        u.getName() != null ? u.getName() : "",
+                "designation", u.getDesignation() != null ? u.getDesignation() : "",
+                "department",  u.getDepartment() != null ? u.getDepartment() : "",
+                "role",        u.getRole(),
+                "status",      u.getStatus()
+        )).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
+    // ── Approve an employee ──────────────────────────────────────────────────
     @PutMapping("/approve/{id}")
-    public void approve(@PathVariable Long id) {
-        AppUser user = repo.findById(id).orElseThrow();
-        user.setApproved(true);
-        repo.save(user);
+    public ResponseEntity<?> approveUser(@PathVariable Long id) {
+        return userRepository.findById(id).map(user -> {
+            user.setStatus("APPROVED");
+            userRepository.save(user);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Employee '" + user.getName() + "' approved successfully.",
+                    "empId",   user.getEmpId() != null ? user.getEmpId() : "",
+                    "name",    user.getName() != null ? user.getName() : ""
+            ));
+        }).orElse(ResponseEntity.notFound().build());
     }
 
+    // ── Reject and delete an employee ────────────────────────────────────────
     @DeleteMapping("/reject/{id}")
-    public void reject(@PathVariable Long id) {
-        repo.deleteById(id);
+    public ResponseEntity<?> rejectUser(@PathVariable Long id) {
+        return userRepository.findById(id).map(user -> {
+            String name = user.getName();
+            userRepository.delete(user);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Employee '" + name + "' registration rejected and removed."
+            ));
+        }).orElse(ResponseEntity.notFound().build());
     }
 
-    @GetMapping("/projects")
-    public List<ProjectResponse> getAllProjects() {
-        return projectRepository.findAll()
-                .stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
-    }
-
-    @GetMapping("/projects/employee/{employeeId}")
-    public List<ProjectResponse> getEmployeeProjects(@PathVariable Long employeeId) {
-        return projectRepository.findByEmployeeId(employeeId)
-                .stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
-    }
-
-    private ProjectResponse toResponse(Project project) {
-        ProjectResponse response = new ProjectResponse();
-        response.setId(project.getId());
-        response.setProjectName(project.getProjectName());
-        response.setDescription(project.getDescription());
-        response.setStartDate(project.getStartDate());
-        response.setEndDate(project.getEndDate());
-        response.setStatus(project.getStatus());
-        response.setEmployeeId(project.getEmployee().getId());
-        response.setEmployeeName(project.getEmployee().getUsername());
-        response.setEmployeeDesignation(project.getEmployee().getDesignation());
-        response.setCreatedAt(project.getCreatedAt());
-        return response;
+    // ── List all approved employees (for Director view) ──────────────────────
+    @GetMapping("/employees")
+    public ResponseEntity<List<Map<String, Object>>> getApprovedEmployees() {
+        List<AppUser> employees = userRepository.findByRoleAndStatus("EMPLOYEE", "APPROVED");
+        List<Map<String, Object>> result = employees.stream().map(u -> Map.<String, Object>of(
+                "id",          u.getId(),
+                "empId",       u.getEmpId() != null ? u.getEmpId() : "",
+                "name",        u.getName() != null ? u.getName() : "",
+                "designation", u.getDesignation() != null ? u.getDesignation() : "",
+                "department",  u.getDepartment() != null ? u.getDepartment() : ""
+        )).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 }

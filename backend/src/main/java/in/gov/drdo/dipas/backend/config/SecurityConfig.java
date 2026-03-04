@@ -12,7 +12,6 @@ import java.util.List;
 
 @Configuration
 public class SecurityConfig {
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
@@ -20,9 +19,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/**").permitAll()
+                        .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().permitAll()
-                );
+                )
+                .formLogin(form -> form.disable())   // 🔥 disable default login
+                .httpBasic(basic -> basic.disable()); // 🔥 disable basic auth
 
         return http.build();
     }

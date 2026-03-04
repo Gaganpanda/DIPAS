@@ -2,6 +2,7 @@ package in.gov.drdo.dipas.backend.controller;
 
 import in.gov.drdo.dipas.backend.model.OrganizationMember;
 import in.gov.drdo.dipas.backend.repository.OrganizationMemberRepository;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +27,7 @@ public class OrganizationController {
 
     @GetMapping
     public List<OrganizationMember> getAll() {
-        return repository.findAll();
+        return repository.findAllByOrderByDisplayOrderAsc();
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -35,6 +36,7 @@ public class OrganizationController {
             @RequestParam String name,
             @RequestParam String position,
             @RequestParam(required = false) String email,
+            @RequestParam(required = false, defaultValue = "0") Integer displayOrder,
             @RequestParam(required = false) MultipartFile image
     ) {
         try {
@@ -43,6 +45,7 @@ public class OrganizationController {
             member.setName(name);
             member.setPosition(position);
             member.setEmail(email);
+            member.setDisplayOrder(displayOrder != null ? displayOrder : 0);
 
             if (image != null && !image.isEmpty()) {
                 File dir = new File(UPLOAD_DIR);
@@ -59,6 +62,18 @@ public class OrganizationController {
         }
     }
 
+    // ✅ NEW: Reorder endpoint for drag-and-drop from admin panel
+    @PutMapping("/reorder")
+    public ResponseEntity<?> reorder(@RequestBody List<ReorderItem> items) {
+        for (ReorderItem item : items) {
+            repository.findById(item.getId()).ifPresent(member -> {
+                member.setDisplayOrder(item.getDisplayOrder());
+                repository.save(member);
+            });
+        }
+        return ResponseEntity.ok("Reordered");
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteMember(@PathVariable Long id) {
         repository.findById(id).ifPresent(m -> {
@@ -71,5 +86,12 @@ public class OrganizationController {
         });
         repository.deleteById(id);
         return ResponseEntity.ok("Deleted");
+    }
+
+    // DTO for reorder payload
+    @Data
+    public static class ReorderItem {
+        private Long id;
+        private Integer displayOrder;
     }
 }

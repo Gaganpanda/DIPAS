@@ -5,17 +5,26 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
-  // ✅ Restore user on refresh
+  // Load from localStorage on refresh
   useEffect(() => {
-    const savedUser = localStorage.getItem("user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    const storedUser = localStorage.getItem("dipasUser");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
     }
   }, []);
 
+  // Save to localStorage when user changes
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem("dipasUser", JSON.stringify(user));
+    } else {
+      localStorage.removeItem("dipasUser");
+    }
+  }, [user]);
+
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("user");
+    localStorage.removeItem("dipasUser");
   };
 
   return (
@@ -25,4 +34,6 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  return useContext(AuthContext);
+};
