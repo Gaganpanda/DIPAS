@@ -105,6 +105,32 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    // ── Get current user's fresh profile from DB (fixes stale localStorage) ──
+    // Call this on app mount to always get up-to-date empId, status etc.
+    @GetMapping("/me")
+    public ResponseEntity<?> me(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body("Missing token.");
+        }
+        String token = authHeader.substring(7);
+        if (!jwtUtil.isValid(token)) {
+            return ResponseEntity.status(401).body("Invalid or expired token.");
+        }
+        String username = jwtUtil.getUsername(token);
+        return userRepository.findByUsername(username).map(user -> {
+            Map<String, Object> response = new HashMap<>();
+            response.put("id",          user.getId());
+            response.put("empId",       user.getEmpId() != null ? user.getEmpId() : "");
+            response.put("username",    user.getUsername());
+            response.put("name",        user.getName());
+            response.put("designation", user.getDesignation());
+            response.put("role",        user.getRole());
+            response.put("department",  user.getDepartment());
+            response.put("status",      user.getStatus());
+            return ResponseEntity.ok(response);
+        }).orElse(ResponseEntity.status(404).body("User not found."));
+    }
+
     // ── DTOs ─────────────────────────────────────────────────────────────────
     @Data
     public static class RegisterRequest {

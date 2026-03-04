@@ -12,9 +12,11 @@ public class AppUser {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;   // internal DB primary key — DO NOT expose as employee ID
 
-    // Custom Employee ID entered by Admin during registration
-    // e.g. "DIPAS001", "SCI-042", "GOV2024-10"
-    @Column(unique = true, nullable = true)
+    // Custom Employee ID entered by employee during self-registration
+    // e.g. "DIPAS001", "SCI-042" — must match the Emp Id column in the attendance Excel sheet.
+    // nullable=true because the column must allow NULL without unique constraint issues.
+    // Uniqueness is enforced in code (AuthController) only when a non-blank value is provided.
+    @Column(nullable = true)
     private String empId;
 
     @Column(unique = true, nullable = false)

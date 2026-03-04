@@ -49,13 +49,26 @@ const YEARS_LIST = Array.from({ length: 6 }, (_, i) => THIS_YEAR - 2 + i); // 2 
 const AttendanceTab = () => {
   const [selMonth, setSelMonth] = useState("01");
   const [selYear,  setSelYear]  = useState(String(THIS_YEAR));
-  const month = `${selYear}-${selMonth}`;   // derived "YYYY-MM"
-  const [file, setFile]       = useState(null);
+  const month = `${selYear}-${selMonth}`;
+  const [file, setFile]           = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [msg, setMsg]         = useState({ text:"", ok:true });
-  const [records, setRecords] = useState(ATT_DUMMY["2025-01"]);
-  const [search, setSearch]   = useState("");
+  const [msg, setMsg]             = useState({ text:"", ok:true });
+  const [records, setRecords]     = useState(ATT_DUMMY["2025-01"]);
+  const [search, setSearch]       = useState("");
+  const [uploadedMonths, setUploadedMonths] = useState([]);  // list of "YYYY-MM" strings
   const WD = 23;
+
+  // Fetch list of months that already have data uploaded
+  const fetchUploadedMonths = async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/attendance/uploaded-months");
+      if (res.ok) setUploadedMonths(await res.json());
+    } catch { /* ignore */ }
+  };
+
+  // Load uploaded months on mount
+  useEffect(() => { fetchUploadedMonths(); }, []);
+
   const changeMonth = async (m) => {
     setMsg({ text:"", ok:true });
     try {
@@ -63,8 +76,10 @@ const AttendanceTab = () => {
       if (res.ok) setRecords(await res.json()); else throw new Error();
     } catch { setRecords(ATT_DUMMY[m] || []); }
   };
+
   // re-fetch whenever month/year changes
-  useState(() => { changeMonth(month); }, [month]);
+  useEffect(() => { changeMonth(month); }, [month]);
+
   const upload = async (e) => {
     e.preventDefault();
     if (!file) { setMsg({ text:"Select a file first.", ok:false }); return; }
@@ -77,6 +92,7 @@ const AttendanceTab = () => {
       const json = await res.json();
       setMsg({ text:`✓ Uploaded ${json.count ?? ""} records for ${label}.`, ok:true });
       changeMonth(month);
+      fetchUploadedMonths();   // refresh uploaded months list
     } catch { setMsg({ text:`Upload failed. Please try again.`, ok:false }); }
     finally {
       setUploading(false); setFile(null);
@@ -86,10 +102,14 @@ const AttendanceTab = () => {
   const rows = records.filter(r => r.name.toLowerCase().includes(search.toLowerCase()) || r.empId.toLowerCase().includes(search.toLowerCase()));
   const avgPresent = records.length ? (records.reduce((s,r)=>s+r.present,0)/records.length).toFixed(1) : 0;
   const totalLeave = records.reduce((s,r)=>s+r.leave,0);
+  const monthLabel = (ym) => {
+    const [y, m2] = ym.split("-");
+    return `${MONTHS_LIST.find(m=>m.value===m2)?.label || m2} ${y}`;
+  };
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:18 }}>
       <form onSubmit={upload}>
-        <div style={{ display:"grid", gridTemplateColumns:"140px 110px 1fr auto", gap:12, alignItems:"end", marginBottom:12 }}>
+        <div className="adm-upload-grid" style={{ display:"grid", gridTemplateColumns:"140px 110px 1fr auto", gap:12, alignItems:"end", marginBottom:12 }}>
           <div>
             <label className="adm-label">Month</label>
             <select value={selMonth} onChange={e=>{ setSelMonth(e.target.value); changeMonth(`${selYear}-${e.target.value}`); }} className="adm-input" style={{ cursor:"pointer" }}>
@@ -118,6 +138,31 @@ const AttendanceTab = () => {
         </div>
         {msg.text && <div className={`adm-alert ${msg.ok?"adm-success":"adm-error"}`} style={{ marginBottom:0 }}>{msg.text}</div>}
       </form>
+
+      {/* ── Uploaded months chips ── */}
+      {uploadedMonths.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Uploaded:</span>
+          {uploadedMonths.map(ym => (
+            <button
+              key={ym}
+              onClick={() => {
+                const [y, m2] = ym.split("-");
+                setSelYear(y); setSelMonth(m2); changeMonth(ym);
+              }}
+              style={{
+                padding:"4px 12px", borderRadius:20, border:"1px solid",
+                fontSize:12, fontWeight:600, cursor:"pointer", transition:"all .15s",
+                background: month === ym ? "#6366f1" : "#ede9fe",
+                color:      month === ym ? "#fff"    : "#5b21b6",
+                borderColor:month === ym ? "#6366f1" : "#c4b5fd",
+              }}
+            >
+              {monthLabel(ym)}
+            </button>
+          ))}
+        </div>
+      )}
       {records.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:14 }}>
           {[
@@ -136,13 +181,12 @@ const AttendanceTab = () => {
         </div>
       )}
       <div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-          <strong style={{ fontSize:14, color:"#0a2342" }}>{MONTHS_LIST.find(m=>m.value===selMonth)?.label} {selYear}</strong>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee…" className="adm-input" style={{ width:190, padding:"8px 12px" }} />
-        </div>
-        {rows.length === 0 ? (
-          <div className="adm-empty"><p>{records.length===0?"No data for this month. Upload a sheet above.":"No matching employees."}</p></div>
-        ) : (
+        {rows.length === 0 ? null : (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <strong style={{ fontSize:14, color:"#0a2342" }}>{MONTHS_LIST.find(m=>m.value===selMonth)?.label} {selYear}</strong>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search employee…" className="adm-input" style={{ width:190, padding:"8px 12px" }} />
+            </div>
           <div style={{ overflowX:"auto" }}>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
               <thead><tr style={{ background:"#f8fafc" }}>
@@ -167,6 +211,7 @@ const AttendanceTab = () => {
                 })}
               </tbody>
             </table>
+          </div>
           </div>
         )}
       </div>
@@ -206,6 +251,8 @@ const AdminDashboard = () => {
   const [regError,   setRegError]   = useState("");
   const [regSuccess, setRegSuccess] = useState("");
   const [regUsers,   setRegUsers]   = useState([]);
+  const [editEmpId,  setEditEmpId]  = useState({});   // { userId: "input value" }
+  const [empIdMsg,   setEmpIdMsg]   = useState({});   // { userId: { text, ok } }
 
   const fetchAllUsers = async () => {
     try {
@@ -240,6 +287,28 @@ const AdminDashboard = () => {
     } catch { setRegError("Server error. Please try again."); }
     finally { setRegLoading(false); }
   };
+
+  // Patch empId on existing user
+  const handlePatchEmpId = async (userId) => {
+    const newId = (editEmpId[userId] || "").trim();
+    if (!newId) { setEmpIdMsg(m => ({ ...m, [userId]: { text: "Enter a valid Employee ID.", ok: false } })); return; }
+    try {
+      const res = await fetch(`http://localhost:8080/api/admin/users/${userId}/empId`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(user?.token ? { "Authorization": `Bearer ${user.token}` } : {}) },
+        body: JSON.stringify({ empId: newId }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setEmpIdMsg(m => ({ ...m, [userId]: { text: `✓ Set to ${newId}`, ok: true } }));
+        setEditEmpId(m => ({ ...m, [userId]: "" }));
+        fetchAllUsers();
+      } else {
+        setEmpIdMsg(m => ({ ...m, [userId]: { text: typeof json === "string" ? json : json.message || "Failed.", ok: false } }));
+      }
+    } catch { setEmpIdMsg(m => ({ ...m, [userId]: { text: "Server error.", ok: false } })); }
+  };
+
   const [orgForm, setOrgForm] = useState({
     departmentName: "", name: "", position: "", email: "", imageFile: null,
   });
@@ -572,154 +641,7 @@ const AdminDashboard = () => {
               </div>
             )}
 
-            {/* ===== MANAGE USERS — REMOVED (employees self-register via Login page) ===== */}
-            {activeTab === "users_disabled" && (
-              <div className="adm-card single-card">
-                <div className="adm-card-header">
-                  <div className="adm-card-icon" style={{ background: "linear-gradient(135deg,#6366f1,#8b5cf6)" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
-                  </div>
-                  <h2>Register New User</h2>
-                </div>
-
-                {/* Registration Form */}
-                <div style={{ maxWidth: 640, margin: "0 auto" }}>
-                  <div style={{ background: "#f8fafc", borderRadius: 14, padding: "24px 28px", border: "1px solid #e5e7eb", marginBottom: 24 }}>
-                    <p style={{ margin: "0 0 18px", fontSize: 13, color: "#6b7280" }}>
-                      Register employees here and assign a custom <strong>Employee ID</strong> (e.g. DIPAS001).
-                      Employee accounts are <span style={{ color: "#f59e0b", fontWeight: 700 }}>PENDING</span> until approved by the Director.
-                    </p>
-
-                    {regError   && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 14px", marginBottom: 14, color: "#991b1b", fontSize: 13 }}>⚠ {regError}</div>}
-                    {regSuccess && <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", marginBottom: 14, color: "#166534", fontSize: 13 }}>✓ {regSuccess}</div>}
-
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 18px" }}>
-
-                      {/* Employee ID */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Employee ID <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
-                        <input
-                          value={regForm.empId}
-                          onChange={e => setRegForm({ ...regForm, empId: e.target.value })}
-                          placeholder="e.g. DIPAS001"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-
-                      {/* Full Name */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Full Name <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
-                        <input
-                          value={regForm.name}
-                          onChange={e => setRegForm({ ...regForm, name: e.target.value })}
-                          placeholder="Dr. Full Name"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                        <p style={{ margin: "3px 0 0", fontSize: 10, color: "#9ca3af" }}>Must match name in attendance Excel exactly</p>
-                      </div>
-
-                      {/* Username */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Username <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
-                        <input
-                          value={regForm.username}
-                          onChange={e => setRegForm({ ...regForm, username: e.target.value })}
-                          placeholder="login username"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-
-                      {/* Password */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Password <span style={{ color: "#ef4444" }}>*</span>
-                        </label>
-                        <input
-                          type="password"
-                          value={regForm.password}
-                          onChange={e => setRegForm({ ...regForm, password: e.target.value })}
-                          placeholder="min 6 characters"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-
-                      {/* Designation */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Designation
-                        </label>
-                        <input
-                          value={regForm.designation}
-                          onChange={e => setRegForm({ ...regForm, designation: e.target.value })}
-                          placeholder="e.g. Scientist F"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-
-                      {/* Department */}
-                      <div>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Department
-                        </label>
-                        <input
-                          value={regForm.department}
-                          onChange={e => setRegForm({ ...regForm, department: e.target.value })}
-                          placeholder="e.g. Technical Cluster"
-                          className="adm-input"
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-                        />
-                      </div>
-
-                      {/* Role */}
-                      <div style={{ gridColumn: "1 / -1" }}>
-                        <label style={{ fontSize: 11, fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: 0.5, display: "block", marginBottom: 5 }}>
-                          Role
-                        </label>
-                        <select
-                          value={regForm.role}
-                          onChange={e => setRegForm({ ...regForm, role: e.target.value })}
-                          style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "2px solid #e5e7eb", fontSize: 13, fontFamily: "inherit", outline: "none", background: "#fff", cursor: "pointer", boxSizing: "border-box" }}
-                        >
-                          <option value="EMPLOYEE">Employee (requires Director approval)</option>
-                          <option value="DIRECTOR">Director (auto-approved)</option>
-                          <option value="ADMIN">Admin (auto-approved)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={handleRegister}
-                      disabled={regLoading}
-                      style={{
-                        marginTop: 20, width: "100%", padding: "11px 20px",
-                        background: regLoading ? "#9ca3af" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
-                        color: "#fff", border: "none", borderRadius: 10,
-                        fontSize: 14, fontWeight: 700, cursor: regLoading ? "not-allowed" : "pointer",
-                        boxShadow: regLoading ? "none" : "0 4px 14px rgba(99,102,241,.35)",
-                      }}
-                    >
-                      {regLoading ? "Registering..." : "Register User"}
-                    </button>
-                  </div>
-
-                  {/* Info box */}
-                  <div style={{ background: "#fffbeb", borderRadius: 10, padding: "12px 16px", border: "1px solid #fde68a", fontSize: 12, color: "#92400e" }}>
-                    <strong>⚡ Important:</strong> The Employee ID (e.g. DIPAS001) must exactly match the <code>Emp Id</code> column in the uploaded attendance Excel sheet. The Full Name must also match the <code>Emp Name</code> column for attendance records to display correctly.
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* ===== USERS TAB ===== */}
             {activeTab === "organization" && (
               <div className="adm-card single-card">
                 <div className="adm-card-header">

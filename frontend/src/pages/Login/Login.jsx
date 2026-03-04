@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
     import { useNavigate, useLocation } from "react-router-dom";
-    import { login, register } from "../../api/authApi";
     import { useAuth } from "../../context/AuthContext";
     import dipasLogo from "../../assets/dipas-logo.png";
     import "./Login.css";
@@ -8,7 +7,7 @@ import { useState, useEffect } from "react";
     const Login = () => {
       const navigate = useNavigate();
       const location = useLocation();
-      const { setUser } = useAuth();
+      const { login } = useAuth();
 
       // role passed like /login (state.role)
       const preSelectedRole = location.state?.role || "employee";
@@ -33,8 +32,8 @@ import { useState, useEffect } from "react";
         confirmPassword: "",
         adminPasskey: "",
         designation: "",
-        empId: "",   // ← new: employee provides their own Emp ID
-        name: "",    // ← new: full name (must match attendance Excel)
+        empId: "",
+        name: "",
       });
 
       /* 🔒 Director always login-only */
@@ -51,37 +50,33 @@ import { useState, useEffect } from "react";
         setLoading(true);
 
         try {
-          const response = await login({
-            username: credentials.username,
-            password: credentials.password,
-            role: preSelectedRole.toUpperCase(),
+          const res = await fetch("http://localhost:8080/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: credentials.username, password: credentials.password }),
           });
+          const data = await res.json();
 
-          if (!response?.role) {
-            throw new Error("Invalid server response");
+          if (!res.ok) {
+            throw new Error(typeof data === "string" ? data : data.message || "Invalid username or password");
           }
 
-          const userData = {
-            ...response,
-            role: response.role.toUpperCase(),
-          };
+          if (!data?.role) throw new Error("Invalid server response");
+
+          const userData = { ...data, role: data.role.toUpperCase() };
 
           // 🔒 Role validation
           if (userData.role !== preSelectedRole.toUpperCase()) {
-            throw new Error("Role mismatch");
+            throw new Error(`This login is for ${preSelectedRole.toUpperCase()} accounts only.`);
           }
 
-          setUser(userData);
+          login(userData);   // ← uses AuthContext login (saves to localStorage)
 
           if (userData.role === "ADMIN") navigate("/admin");
           else if (userData.role === "DIRECTOR") navigate("/director");
           else navigate("/employee");
         } catch (err) {
-          setError(
-            err.response?.data?.message ||
-              err.message ||
-              "Invalid username or password",
-          );
+          setError(err.message || "Invalid username or password");
         } finally {
           setLoading(false);
         }
@@ -98,28 +93,22 @@ import { useState, useEffect } from "react";
           setError("Passwords do not match");
           return;
         }
-
         if (registerData.password.length < 6) {
           setError("Password must be at least 6 characters");
           return;
         }
-
-        if (isEmployee && !registerData.designation) {
-          setError("Designation is required");
-          return;
-        }
-
-        // ← new: empId and name required for employees
         if (isEmployee && !registerData.empId.trim()) {
           setError("Employee ID is required");
           return;
         }
-
         if (isEmployee && !registerData.name.trim()) {
           setError("Full name is required");
           return;
         }
-
+        if (isEmployee && !registerData.designation) {
+          setError("Designation is required");
+          return;
+        }
         if (isAdmin && registerData.adminPasskey !== "DIPAS@ADMIN123") {
           setError("Invalid Admin Passkey");
           return;
@@ -128,15 +117,24 @@ import { useState, useEffect } from "react";
         setLoading(true);
 
         try {
-          await register({
-            username: registerData.username,
-            password: registerData.password,
-            name: isEmployee ? registerData.name.trim() : registerData.username,
-            role: preSelectedRole.toUpperCase(),
-            designation: isEmployee ? registerData.designation : "ADMIN",
-            department: preSelectedRole.toUpperCase(),
-            empId: isEmployee ? registerData.empId.trim() : null,  // ← new
+          const res = await fetch("http://localhost:8080/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              username:    registerData.username,
+              password:    registerData.password,
+              name:        isEmployee ? registerData.name.trim() : registerData.username,
+              role:        preSelectedRole.toUpperCase(),
+              designation: isEmployee ? registerData.designation : "ADMIN",
+              department:  preSelectedRole.toUpperCase(),
+              empId:       isEmployee ? registerData.empId.trim() : null,
+            }),
           });
+          const data = await res.json();
+
+          if (!res.ok) {
+            throw new Error(typeof data === "string" ? data : data.message || "Registration failed");
+          }
 
           if (isEmployee) {
             setError("Registration successful. Awaiting Director approval.");
@@ -144,24 +142,22 @@ import { useState, useEffect } from "react";
             return;
           }
 
-          const response = await login({
-            username: registerData.username,
-            password: registerData.password,
-            role: preSelectedRole.toUpperCase(),
+          // Admin: auto-login after register
+          const loginRes = await fetch("http://localhost:8080/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username: registerData.username, password: registerData.password }),
           });
-
-          setUser({
-            ...response,
-            role: response.role.toUpperCase(),
-          });
-
-          navigate("/admin");
+          const loginData = await loginRes.json();
+          if (loginRes.ok) {
+            login({ ...loginData, role: loginData.role.toUpperCase() });
+            navigate("/admin");
+          } else {
+            setError("Registered successfully. Please log in.");
+            setIsLogin(true);
+          }
         } catch (err) {
-          setError(
-            err.response?.data?.message ||
-              err.message ||
-              "Registration failed"
-          );
+          setError(err.message || "Registration failed");
         } finally {
           setLoading(false);
         }
@@ -422,59 +418,57 @@ import { useState, useEffect } from "react";
             ) : (
               /* REGISTER FORM */
               <form onSubmit={handleRegister} className="login-form">
-                {/* ── NEW: Emp ID field — employees only ── */}
+                {/* ── NEW: Emp ID + Full Name — side by side, employees only ── */}
                 {isEmployee && (
-                  <div className="form-group">
-                    <label>
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-                        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-                      </svg>
-                      Employee ID
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. DIPAS001 (must match attendance sheet)"
-                      value={registerData.empId}
-                      onChange={(e) =>
-                        setRegisterData({ ...registerData, empId: e.target.value })
-                      }
-                      required
-                    />
-                  </div>
-                )}
-
-                {/* ── NEW: Full Name field — employees only ── */}
-                {isEmployee && (
-                  <div className="form-group">
-                    <label>
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                      Full Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="As it appears in the attendance sheet"
-                      value={registerData.name}
-                      onChange={(e) =>
-                        setRegisterData({ ...registerData, name: e.target.value })
-                      }
-                      required
-                    />
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
+                    <div className="form-group">
+                      <label>
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2">
+                          <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                          <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                        </svg>
+                        Employee ID
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. DIPAS001"
+                        value={registerData.empId}
+                        onChange={(e) =>
+                          setRegisterData({ ...registerData, empId: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter your full name"
+                        value={registerData.name}
+                        onChange={(e) =>
+                          setRegisterData({ ...registerData, name: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
                   </div>
                 )}
 

@@ -103,8 +103,8 @@ const MyAttendanceCard = ({ user }) => {
     <div style={{ textAlign:"center", padding:"36px 16px", background:"#fef9c3", borderRadius:14, border:"1px solid #fde047" }}>
       <div style={{ fontSize:36, marginBottom:8 }}>⚠️</div>
       <p style={{ margin:0, fontWeight:700, color:"#92400e" }}>Employee ID not set</p>
-      <p style={{ margin:"4px 0 0", fontSize:12, color:"#b45309" }}>
-        Your account has no Employee ID. Ask Admin to set it during registration.
+      <p style={{ margin:"6px 0 0", fontSize:13, color:"#b45309", maxWidth:360, margin:"6px auto 0" }}>
+        Your account was registered without an Employee ID. Please contact Admin or Director to update your account with your Employee ID (e.g. <strong>DIPAS001</strong>) so it matches the attendance Excel sheet.
       </p>
     </div>
   );
@@ -172,7 +172,7 @@ const MyAttendanceCard = ({ user }) => {
       {!loadingRec && data && (
         <>
           {/* 3 stat cards */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+          <div className="emp-att-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
             {/* Present */}
             <div style={{ background:"#f0fdf4", borderRadius:12, padding:16, border:"1px solid #bbf7d0" }}>
               <div style={{ fontSize:10, fontWeight:700, color:"#16a34a", marginBottom:5, textTransform:"uppercase", letterSpacing:0.4 }}>Days Present</div>
@@ -204,6 +204,51 @@ const MyAttendanceCard = ({ user }) => {
             </div>
           </div>
 
+          {/* Full leave breakdown */}
+          {leaves.length > 0 && (
+            <div style={{ background:"#fff", borderRadius:12, border:"1px solid #e5e7eb", overflow:"hidden" }}>
+              <div style={{ padding:"10px 16px", background:"#f8fafc", borderBottom:"1px solid #e5e7eb", fontSize:12, fontWeight:700, color:"#374151" }}>
+                Leave Breakdown
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(100px, 1fr))", gap:0 }}>
+                {[
+                  { label:"EL",   val: data.EL   ?? 0, color:"#6366f1", name:"Earned" },
+                  { label:"CL",   val: data.CL   ?? 0, color:"#10b981", name:"Casual" },
+                  { label:"MED",  val: data.MED  ?? 0, color:"#ef4444", name:"Medical" },
+                  { label:"RH",   val: data.RH   ?? 0, color:"#f59e0b", name:"Restricted" },
+                  { label:"HPL",  val: data.HPL  ?? 0, color:"#3b82f6", name:"Half Pay" },
+                  { label:"COMP", val: data.COMP ?? data.comp ?? 0, color:"#8b5cf6", name:"Comp Off" },
+                  { label:"TD",   val: data.TD   ?? 0, color:"#ec4899", name:"Tour Duty" },
+                ].map(l => (
+                  <div key={l.label} style={{
+                    padding:"12px 14px", borderRight:"1px solid #f1f5f9", borderBottom:"1px solid #f1f5f9",
+                    opacity: l.val > 0 ? 1 : 0.4
+                  }}>
+                    <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>{l.name}</div>
+                    <div style={{ fontSize:20, fontWeight:800, color: l.val > 0 ? l.color : "#d1d5db" }}>{l.val}</div>
+                    <div style={{ fontSize:10, fontWeight:700, color: l.val > 0 ? l.color : "#d1d5db" }}>{l.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Time & working days info */}
+          <div style={{ background:"#f8fafc", borderRadius:10, padding:"12px 16px", border:"1px solid #e5e7eb", display:"flex", flexWrap:"wrap", gap:20 }}>
+            {[
+              { label:"Avg In Time",  val: data.intime  ?? "—" },
+              { label:"Avg Out Time", val: data.outtime ?? "—" },
+              { label:"Avg Working Hrs", val: data.avgWorkingHrs ? `${data.avgWorkingHrs}h` : "—" },
+              { label:"Working Days",    val: data.workingDays ?? 23 },
+              { label:"Days Absent",     val: (data.workingDays ?? 23) - (data.attendance ?? 0) - (data.totalLeave ?? 0) },
+            ].map(s => (
+              <div key={s.label}>
+                <div style={{ fontSize:10, color:"#9ca3af" }}>{s.label}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#374151" }}>{s.val}</div>
+              </div>
+            ))}
+          </div>
+
           {/* No leave badge */}
           {(data.totalLeave ?? 0) === 0 && (
             <div style={{ background:"#f0fdf4", borderRadius:8, padding:"10px 14px", border:"1px solid #bbf7d0", fontSize:12, color:"#16a34a", fontWeight:600, textAlign:"center" }}>
@@ -218,10 +263,14 @@ const MyAttendanceCard = ({ user }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EmployeeDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState("profile");
+  // Always fetch fresh user data from DB on mount — fixes stale empId in localStorage
+  useEffect(() => { refreshUser(); }, []);
+
+  const [activeTab, setActiveTab] = useState(() => sessionStorage.getItem("emp_tab") || "profile");
+  const changeTab = (t) => { setActiveTab(t); sessionStorage.setItem("emp_tab", t); };
   const [projects, setProjects] = useState([]);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -329,7 +378,7 @@ const EmployeeDashboard = () => {
                 { key:"projects", label:"Projects", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg> },
                 { key:"attendance", label:"Attendance", icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg> },
               ].map(t=>(
-                <button key={t.key} className={activeTab===t.key?"menu-btn active":"menu-btn"} onClick={()=>setActiveTab(t.key)}>
+                <button key={t.key} className={activeTab===t.key?"menu-btn active":"menu-btn"} onClick={()=>changeTab(t.key)}>
                   {t.icon}{t.label}
                 </button>
               ))}
