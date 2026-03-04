@@ -82,7 +82,7 @@ const DirectorDashboard = () => {
                 <path d="M12 2l8 4v6c0 5-3.5 9.74-8 11-4.5-1.26-8-6-8-11V6l8-4z"/>
               </svg>
             </div>
-            <div><h1>Director Panel</h1><span className="subtitle">Employee Approval Management</span></div>
+            <div><h1>Director Panel</h1></div>
           </div>
           <div className="director-user">
             <div className="user-avatar">{user.username?.charAt(0).toUpperCase()}</div>

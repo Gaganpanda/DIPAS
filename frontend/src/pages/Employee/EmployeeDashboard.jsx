@@ -347,7 +347,6 @@ const EmployeeDashboard = () => {
             </div>
             <div>
               <h1>Employee Dashboard</h1>
-              <span className="subtitle">Personal Workspace</span>
             </div>
           </div>
           <div className="employee-user">

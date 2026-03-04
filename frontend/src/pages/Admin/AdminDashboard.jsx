@@ -520,7 +520,6 @@ const AdminDashboard = () => {
             </div>
             <div>
               <h1>Administration Panel</h1>
-              <span className="subtitle">DIPAS Management System</span>
             </div>
           </div>
           <div className="admin-user">
