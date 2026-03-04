@@ -82,7 +82,7 @@ const DirectorDashboard = () => {
                 <path d="M12 2l8 4v6c0 5-3.5 9.74-8 11-4.5-1.26-8-6-8-11V6l8-4z"/>
               </svg>
             </div>
-            <div><h1>Director Panel</h1></div>
+            <div><h1>Director Panel</h1><span className="subtitle">Employee Approval Management</span></div>
           </div>
           <div className="director-user">
             <div className="user-avatar">{user.username?.charAt(0).toUpperCase()}</div>
@@ -165,6 +165,7 @@ const DirectorDashboard = () => {
             )}
 
             {/* PROJECTS */}
+            {/* ── PROJECTS — all employee projects ── */}
             {activeTab === "projects" && (
               <div className="content-card">
                 <div className="content-card-header">
@@ -172,7 +173,7 @@ const DirectorDashboard = () => {
                     <div className="content-card-icon projects-icon">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                     </div>
-                    <h2>All Projects</h2>
+                    <h2>All Employee Projects</h2>
                   </div>
                   <div className="approval-badge" style={{ background:"linear-gradient(135deg,#eff6ff,#dbeafe)", borderColor:"#bfdbfe" }}>
                     <span style={{ color:"#3b82f6" }}>{projects.length}</span><small>Total</small>
@@ -181,7 +182,7 @@ const DirectorDashboard = () => {
                 {projects.length === 0 ? (
                   <div className="empty-state">
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                    <p>No projects yet</p><span>Projects from employees will appear here</span>
+                    <p>No projects yet</p><span>Projects added by employees will appear here</span>
                   </div>
                 ) : (
                   <div className="projects-list">
@@ -193,8 +194,14 @@ const DirectorDashboard = () => {
                         </div>
                         <p className="project-desc">{p.description}</p>
                         <div className="project-meta-row">
-                          <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>{p.employeeName?.toUpperCase()}</span>
-                          <span>{p.employeeDesignation}</span>
+                          <span style={{ display:"flex", alignItems:"center", gap:5 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            {p.employeeName?.toUpperCase() || "—"}
+                          </span>
+                          {p.employeeEmpId && <span style={{ color:"#6366f1", fontWeight:700, fontFamily:"monospace" }}>{p.employeeEmpId}</span>}
+                          <span style={{ color:"#9ca3af" }}>{p.employeeDesignation}</span>
+                          {p.startDate && <span style={{ fontSize:11, color:"#9ca3af" }}>Start: {p.startDate}</span>}
+                          {p.endDate   && <span style={{ fontSize:11, color:"#9ca3af" }}>End: {p.endDate}</span>}
                         </div>
                       </div>
                     ))}
@@ -203,7 +210,7 @@ const DirectorDashboard = () => {
               </div>
             )}
 
-            {/* ✅ ATTENDANCE — Director overview */}
+            {/* ── ATTENDANCE — Director overview ── */}
             {activeTab === "attendance" && (
               <div className="content-card">
                 <DirectorAttendanceDashboard />

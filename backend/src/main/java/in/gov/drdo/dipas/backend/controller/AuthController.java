@@ -106,7 +106,6 @@ public class AuthController {
     }
 
     // ── Get current user's fresh profile from DB (fixes stale localStorage) ──
-    // Call this on app mount to always get up-to-date empId, status etc.
     @GetMapping("/me")
     public ResponseEntity<?> me(@RequestHeader("Authorization") String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -117,18 +116,20 @@ public class AuthController {
             return ResponseEntity.status(401).body("Invalid or expired token.");
         }
         String username = jwtUtil.getUsername(token);
-        return userRepository.findByUsername(username).map(user -> {
-            Map<String, Object> response = new HashMap<>();
-            response.put("id",          user.getId());
-            response.put("empId",       user.getEmpId() != null ? user.getEmpId() : "");
-            response.put("username",    user.getUsername());
-            response.put("name",        user.getName());
-            response.put("designation", user.getDesignation());
-            response.put("role",        user.getRole());
-            response.put("department",  user.getDepartment());
-            response.put("status",      user.getStatus());
-            return ResponseEntity.ok(response);
-        }).orElse(ResponseEntity.status(404).body("User not found."));
+        AppUser user = userRepository.findByUsername(username).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(404).body("User not found.");
+        }
+        Map<String, Object> body = new HashMap<>();
+        body.put("id",          user.getId());
+        body.put("empId",       user.getEmpId() != null ? user.getEmpId() : "");
+        body.put("username",    user.getUsername());
+        body.put("name",        user.getName());
+        body.put("designation", user.getDesignation());
+        body.put("role",        user.getRole());
+        body.put("department",  user.getDepartment());
+        body.put("status",      user.getStatus());
+        return ResponseEntity.ok(body);
     }
 
     // ── DTOs ─────────────────────────────────────────────────────────────────

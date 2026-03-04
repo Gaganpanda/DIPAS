@@ -1,7 +1,9 @@
 package in.gov.drdo.dipas.backend.controller;
 
 import in.gov.drdo.dipas.backend.model.AppUser;
+import in.gov.drdo.dipas.backend.model.Project;
 import in.gov.drdo.dipas.backend.repository.AppUserRepository;
+import in.gov.drdo.dipas.backend.repository.ProjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,7 @@ import java.util.stream.Collectors;
 public class DirectorController {
 
     private final AppUserRepository userRepository;
+    private final ProjectRepository projectRepository;
 
     // ── List all PENDING employee registrations ──────────────────────────────
     @GetMapping("/pending")
@@ -72,6 +75,31 @@ public class DirectorController {
                 "designation", u.getDesignation() != null ? u.getDesignation() : "",
                 "department",  u.getDepartment() != null ? u.getDepartment() : ""
         )).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    // ── List all projects across all employees ───────────────────────────────
+    @GetMapping("/projects")
+    public ResponseEntity<List<Map<String, Object>>> getAllProjects() {
+        List<Map<String, Object>> result = projectRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(p -> {
+                    AppUser emp = p.getEmployee();
+                    java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("id",                  p.getId());
+                    m.put("projectName",         p.getProjectName());
+                    m.put("description",         p.getDescription());
+                    m.put("startDate",           p.getStartDate() != null ? p.getStartDate().toString() : "");
+                    m.put("endDate",             p.getEndDate()   != null ? p.getEndDate().toString()   : "");
+                    m.put("status",              p.getStatus());
+                    m.put("createdAt",           p.getCreatedAt() != null ? p.getCreatedAt().toString() : "");
+                    m.put("employeeName",        emp != null && emp.getName()        != null ? emp.getName()        : "");
+                    m.put("employeeEmpId",       emp != null && emp.getEmpId()       != null ? emp.getEmpId()       : "");
+                    m.put("employeeDesignation", emp != null && emp.getDesignation() != null ? emp.getDesignation() : "");
+                    m.put("employeeDepartment",  emp != null && emp.getDepartment()  != null ? emp.getDepartment()  : "");
+                    return m;
+                })
+                .collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
 }
